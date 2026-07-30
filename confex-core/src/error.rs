@@ -19,6 +19,8 @@ pub enum SourceError {
     Env(String),
     #[error("crypto error: {0}")]
     Crypto(#[from] CryptoError),
+    #[error("backend error: {0}")]
+    Backend(String),
 }
 
 #[derive(Debug, Error)]

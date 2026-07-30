@@ -3,6 +3,10 @@ name = "confex"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["sqlite-backend"]
+sqlite-backend = ["confex-core/sqlite-backend"]
+
 [dependencies]
 confex-core = { path = "../confex-core" }
 confex-macros = { path = "../confex-macros" }

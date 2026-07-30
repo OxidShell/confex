@@ -14,3 +14,6 @@ pub use confex_core::source::{CliSource, EnvSource, FileSource, Source};
 pub use confex_core::value::ConfigValue;
 // Re-export the derive macro under the same name as the trait (two namespaces, no conflict)
 pub use confex_macros::ConfigSchema;
+
+#[cfg(feature = "sqlite-backend")]
+pub use confex_core::sqlite::{SqliteSource, SqliteStore};

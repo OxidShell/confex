@@ -9,5 +9,7 @@ pub mod key;
 pub mod merge;
 pub mod migrate;
 pub mod paths;
+#[cfg(feature = "sqlite-backend")]
+pub mod sqlite;
 pub mod source;
 pub mod value;
