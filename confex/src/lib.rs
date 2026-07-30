@@ -17,3 +17,7 @@ pub use confex_macros::ConfigSchema;
 
 #[cfg(feature = "sqlite-backend")]
 pub use confex_core::sqlite::{SqliteSource, SqliteStore};
+
+pub use confex_core::handle::{ConfigHandle, HotReloadError, WatchOptions, WriteGuard};
+#[cfg(feature = "hot-reload")]
+pub use confex_core::handle::WatcherHandle;

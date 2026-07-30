@@ -1,7 +1,7 @@
-use confex::{ConfigLoader, ConfigSchema, EnvSource};
-use serde::Deserialize;
+use confex::{ConfigHandle, ConfigLoader, ConfigSchema, EnvSource};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, ConfigSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ConfigSchema)]
 #[config(app_name = "myapp", version = 1)]
 struct AppConfig {
     host: String,
@@ -18,8 +18,10 @@ fn main() {
         .load()
         .expect("failed to load config");
 
+    let handle = ConfigHandle::new(config);
+    let cfg = handle.read();
     println!(
         "host={} port={} nickname={:?} tags={:?}",
-        config.host, config.port, config.nickname, config.tags
+        cfg.host, cfg.port, cfg.nickname, cfg.tags
     );
 }
