@@ -65,6 +65,27 @@ impl From<&str> for ConfigValue {
     }
 }
 
+impl From<serde_json::Value> for ConfigValue {
+    fn from(v: serde_json::Value) -> Self {
+        match v {
+            serde_json::Value::Null => Self::Null,
+            serde_json::Value::Bool(b) => Self::Bool(b),
+            serde_json::Value::Number(n) => n
+                .as_i64()
+                .map(Self::Integer)
+                .or_else(|| n.as_f64().map(Self::Float))
+                .unwrap_or(Self::Null),
+            serde_json::Value::String(s) => Self::String(s),
+            serde_json::Value::Array(arr) => {
+                Self::Array(arr.into_iter().map(Self::from).collect())
+            }
+            serde_json::Value::Object(map) => {
+                Self::Table(map.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
+            }
+        }
+    }
+}
+
 impl From<ConfigValue> for serde_json::Value {
     fn from(v: ConfigValue) -> Self {
         match v {

@@ -5,6 +5,7 @@ edition = "2024"
 
 [features]
 sqlite-backend = ["dep:rusqlite"]
+hot-reload = ["dep:notify"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -14,7 +15,10 @@ thiserror = "2"
 aes-gcm = "0.10"
 rand = "0.8"
 hex = "0.4"
+arc-swap = "1"
+tracing = "0.1"
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+notify = { version = "6", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

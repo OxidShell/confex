@@ -5,6 +5,7 @@ pub mod config;
 pub mod crypto;
 pub mod error;
 pub mod format;
+pub mod handle;
 pub mod key;
 pub mod merge;
 pub mod migrate;

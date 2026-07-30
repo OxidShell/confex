@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
     crypto::{Encryptor, decrypt_fields},
@@ -14,7 +14,7 @@ use crate::{
 /// Marker trait for types that can be loaded via [`ConfigLoader`].
 ///
 /// Implement manually or via `#[derive(ConfigSchema)]` (Phase 1).
-pub trait ConfigSchema: DeserializeOwned {
+pub trait ConfigSchema: DeserializeOwned + Serialize {
     const APP_NAME: &'static str;
     const SCHEMA_VERSION: u32;
 

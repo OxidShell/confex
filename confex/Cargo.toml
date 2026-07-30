@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["sqlite-backend"]
+default = ["sqlite-backend", "hot-reload"]
 sqlite-backend = ["confex-core/sqlite-backend"]
+hot-reload = ["confex-core/hot-reload"]
 
 [dependencies]
 confex-core = { path = "../confex-core" }
