@@ -30,6 +30,7 @@ pub struct Aes256GcmEncryptor {
 }
 
 impl Aes256GcmEncryptor {
+    #[must_use]
     pub fn new(key: &SecretKey) -> Self {
         Self {
             cipher: Aes256Gcm::new(key.as_bytes().into()),
@@ -132,6 +133,7 @@ pub struct EncryptedFormat<'a, F: Format> {
 }
 
 impl<'a, F: Format> EncryptedFormat<'a, F> {
+    #[must_use]
     pub fn new(inner: F, encryptor: &'a dyn Encryptor) -> Self {
         Self { inner, encryptor }
     }

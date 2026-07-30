@@ -24,6 +24,7 @@ pub struct EnvSource {
 }
 
 impl EnvSource {
+    #[must_use]
     pub fn new(prefix: impl Into<String>) -> Self {
         Self {
             prefix: prefix.into(),
@@ -89,6 +90,7 @@ pub struct CliSource {
 }
 
 impl CliSource {
+    #[must_use]
     pub fn from_pairs(pairs: impl IntoIterator<Item = (String, ConfigValue)>) -> Self {
         Self {
             values: pairs.into_iter().collect(),
@@ -109,6 +111,7 @@ pub struct FileSource<F: Format> {
 }
 
 impl<F: Format> FileSource<F> {
+    #[must_use]
     pub fn new(candidates: Vec<PathBuf>, format: F) -> Self {
         Self { candidates, format }
     }

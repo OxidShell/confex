@@ -35,6 +35,7 @@ pub struct FileKeyProvider {
 }
 
 impl FileKeyProvider {
+    #[must_use]
     pub fn new(path: PathBuf) -> Self {
         Self { path }
     }

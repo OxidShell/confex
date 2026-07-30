@@ -42,7 +42,7 @@ impl Format for TomlFormat {
     fn serialize(&self, value: &ConfigValue) -> Result<Vec<u8>, SourceError> {
         let toml_val = config_to_toml(value.clone());
         toml::to_string(&toml_val)
-            .map(|s| s.into_bytes())
+            .map(String::into_bytes)
             .map_err(|e| SourceError::Serialize(e.to_string()))
     }
 }

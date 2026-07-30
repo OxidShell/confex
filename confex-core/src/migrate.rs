@@ -2,6 +2,8 @@ use crate::{error::MigrationError, value::ConfigValue};
 
 /// A single schema migration step.
 pub trait Migration {
+    // Naming mirrors the `from`/`to` language used throughout the plan docs.
+    #[allow(clippy::wrong_self_convention)]
     fn from_version(&self) -> u32;
     fn to_version(&self) -> u32;
 
@@ -59,9 +61,9 @@ impl MigrationChain {
 
 /// Rename a top-level key in a `ConfigValue::Table`. No-op if `from` is absent.
 pub fn rename_key(value: &mut ConfigValue, from: &str, to: &str) {
-    if let ConfigValue::Table(table) = value {
-        if let Some(v) = table.remove(from) {
-            table.insert(to.to_owned(), v);
-        }
+    if let ConfigValue::Table(table) = value
+        && let Some(v) = table.remove(from)
+    {
+        table.insert(to.to_owned(), v);
     }
 }

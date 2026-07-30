@@ -19,11 +19,13 @@ pub trait ConfigSchema: DeserializeOwned {
     const SCHEMA_VERSION: u32;
 
     /// Per-field merge strategies. Default: all fields use `Replace`.
+    #[must_use]
     fn field_strategies() -> FieldStrategies {
         &[]
     }
 
     /// Field names whose string values are encrypted at rest.
+    #[must_use]
     fn encrypted_fields() -> &'static [&'static str] {
         &[]
     }
@@ -90,10 +92,10 @@ impl<S: ConfigSchema> ConfigLoader<S> {
             _ => 0,
         };
 
-        if current_version < S::SCHEMA_VERSION {
-            if let Some(chain) = self.migrations {
-                merged = chain.run(merged, current_version, S::SCHEMA_VERSION)?;
-            }
+        if current_version < S::SCHEMA_VERSION
+            && let Some(chain) = self.migrations
+        {
+            merged = chain.run(merged, current_version, S::SCHEMA_VERSION)?;
         }
 
         if let Some(enc) = &self.encryptor {

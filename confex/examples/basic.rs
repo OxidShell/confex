@@ -1,15 +1,14 @@
 use confex::{ConfigLoader, ConfigSchema, EnvSource};
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ConfigSchema)]
+#[config(app_name = "myapp", version = 1)]
 struct AppConfig {
     host: String,
     port: u16,
-}
-
-impl ConfigSchema for AppConfig {
-    const APP_NAME: &'static str = "myapp";
-    const SCHEMA_VERSION: u32 = 1;
+    nickname: Option<String>,
+    #[config(merge = "extend")]
+    tags: Vec<String>,
 }
 
 fn main() {
@@ -19,5 +18,8 @@ fn main() {
         .load()
         .expect("failed to load config");
 
-    println!("host={} port={}", config.host, config.port);
+    println!(
+        "host={} port={} nickname={:?} tags={:?}",
+        config.host, config.port, config.nickname, config.tags
+    );
 }
