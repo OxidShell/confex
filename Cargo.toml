@@ -1,0 +1,3 @@
+[workspace]
+members = ["confex-core", "confex-macros", "confex"]
+resolver = "2"
