@@ -10,10 +10,12 @@ use thiserror::Error;
 
 use crate::{
     config::ConfigSchema,
-    error::LoadError,
     format::Format,
     value::ConfigValue,
 };
+
+#[cfg(feature = "hot-reload")]
+use crate::error::LoadError;
 
 // ── errors ────────────────────────────────────────────────────────────────────
 

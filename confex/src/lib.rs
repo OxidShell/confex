@@ -7,6 +7,18 @@ pub use confex_core::crypto::{
 pub use confex_core::error::{CryptoError, KeyError, LoadError, MigrationError, SourceError};
 pub use confex_core::format::{Format, TomlFormat};
 pub use confex_core::key::{FileKeyProvider, KeyProvider, SecretKey};
+
+#[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+pub use confex_core::key::LinuxKeyring;
+
+#[cfg(all(target_os = "macos", feature = "macos-keychain"))]
+pub use confex_core::key::MacOsKeychain;
+
+#[cfg(all(windows, feature = "windows-dpapi"))]
+pub use confex_core::key::WindowsDpapi;
+
+#[cfg(feature = "sealed-key")]
+pub use confex_core::key::{PassphraseUnsealer, SealedFileKeyProvider, Unsealer};
 pub use confex_core::merge::{FieldStrategies, MergeStrategy};
 pub use confex_core::migrate::{Migration, MigrationChain, rename_key};
 pub use confex_core::paths::{app_config_dir, app_data_dir, config_base_dir, data_base_dir};

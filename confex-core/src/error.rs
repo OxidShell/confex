@@ -49,6 +49,18 @@ pub enum KeyError {
     Io(#[from] std::io::Error),
     #[error("invalid key length: expected 32 bytes, got {0}")]
     InvalidLength(usize),
+    #[error("kernel keyring error: {0}")]
+    Keyring(String),
+    #[error("DPAPI error: {0}")]
+    Dpapi(String),
+    #[error("keychain error: {0}")]
+    Keychain(String),
+    #[error("KDF error")]
+    Kdf,
+    #[error("sealed key blob is invalid")]
+    InvalidBlob,
+    #[error("passphrase not available")]
+    Passphrase,
 }
 
 #[derive(Debug, Error)]
