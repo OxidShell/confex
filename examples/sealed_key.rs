@@ -1,4 +1,4 @@
-/// Use SealedFileKeyProvider so the key blob on disk is protected by a passphrase.
+/// Use [`SealedFileKeyProvider`] so the key blob on disk is protected by a passphrase.
 /// The passphrase comes from the CONFEX_MASTER_KEY env var — CI/CD friendly.
 ///
 /// Run: CONFEX_MASTER_KEY=secret cargo run --example sealed_key --features sealed-key

@@ -1,7 +1,7 @@
-/// Mutate config at runtime via WriteGuard.
+/// Mutate config at runtime via [`WriteGuard`].
 /// Changes are visible to all clones of the handle immediately.
 ///
-/// Run: cargo run --example write_guard
+/// Run: `cargo run --example write_guard`
 use confex::{ConfigHandle, ConfigLoader, ConfigSchema, EnvSource};
 use serde::{Deserialize, Serialize};
 

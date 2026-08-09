@@ -1,6 +1,6 @@
 /// Load config from a TOML file, fall back to env vars.
 ///
-/// Run: cargo run --example file_toml
+/// Run: `cargo run --example file_toml`
 use std::path::PathBuf;
 
 use confex::{ConfigHandle, ConfigLoader, ConfigSchema, EnvSource, FileSource, TomlFormat};
@@ -24,8 +24,7 @@ struct TlsConfig {
 
 fn main() {
     let config_path = std::env::var_os("CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("server.toml"));
+        .map_or_else(|| PathBuf::from("server.toml"), PathBuf::from);
 
     let config = ConfigLoader::<ServerConfig>::default()
         .with_source(FileSource::new(vec![config_path], TomlFormat))

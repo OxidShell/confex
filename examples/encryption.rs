@@ -1,5 +1,5 @@
 /// Encrypt sensitive fields at rest using AES-256-GCM.
-/// The key is stored in a file with 0600 permissions (FileKeyProvider).
+/// The key is stored in a file with 0600 permissions ([`FileKeyProvider`]).
 ///
 /// Run: cargo run --example encryption
 use std::path::PathBuf;

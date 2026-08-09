@@ -8,6 +8,7 @@ sqlite-backend = ["dep:rusqlite"]
 hot-reload = ["dep:notify"]
 native-keyring = ["dep:keyutils", "dep:security-framework", "dep:windows"]
 sealed-key = ["dep:argon2"]
+async = []
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

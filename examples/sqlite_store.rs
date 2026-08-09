@@ -1,12 +1,12 @@
-/// Persist and read config from the SQLite dconf-like backend.
+/// Persist and read config from the `SQLite` dconf-like backend.
 ///
-/// Run: cargo run --example sqlite_store --features sqlite-backend
+/// Run: `cargo run --example sqlite_store --features sqlite-backend`
 #[cfg(feature = "sqlite-backend")]
 fn main() {
     use std::path::PathBuf;
 
     use confex::{
-        ConfigLoader, ConfigSchema, EnvSource, SqliteSource, SqliteStore, app_data_dir,
+        ConfigLoader, ConfigSchema, ConfigValue, EnvSource, SqliteSource, SqliteStore, app_data_dir,
     };
     use serde::{Deserialize, Serialize};
 
@@ -22,8 +22,6 @@ fn main() {
     let db_path = app_data_dir("prefs")
         .unwrap_or_else(|| PathBuf::from("."))
         .join("prefs.db");
-
-    use confex::ConfigValue;
 
     // Write some preferences.
     let store = SqliteStore::new(&db_path, "prefs");

@@ -11,6 +11,9 @@ use crate::{
     value::ConfigValue,
 };
 
+#[cfg(feature = "async")]
+use crate::source::AsyncSource;
+
 /// Marker trait for types that can be loaded via [`ConfigLoader`].
 ///
 /// Implement manually or via `#[derive(ConfigSchema)]` (Phase 1).
@@ -81,6 +84,89 @@ impl<S: ConfigSchema> ConfigLoader<S> {
         let mut merged = ConfigValue::Table(BTreeMap::new());
         for source in self.sources {
             let collected = source.collect()?;
+            merged = merge(merged, collected, strategies);
+        }
+
+        let current_version = match &merged {
+            ConfigValue::Table(t) => match t.get("__schema_version") {
+                Some(ConfigValue::Integer(v)) => u32::try_from(*v).unwrap_or(0),
+                _ => 0,
+            },
+            _ => 0,
+        };
+
+        if current_version < S::SCHEMA_VERSION
+            && let Some(chain) = self.migrations
+        {
+            merged = chain.run(merged, current_version, S::SCHEMA_VERSION)?;
+        }
+
+        if let Some(enc) = &self.encryptor {
+            decrypt_fields(&mut merged, S::encrypted_fields(), enc.as_ref())?;
+        }
+
+        let json: serde_json::Value = merged.into();
+        Ok(serde_json::from_value(json)?)
+    }
+}
+
+// ── async loader ──────────────────────────────────────────────────────────────
+
+/// Async variant of [`ConfigLoader`]. Sources are driven with `.await`; the
+/// executor (tokio, async-std, …) is provided by the caller.
+///
+/// Sync sources automatically implement [`AsyncSource`] via the blanket impl,
+/// so they can be mixed with async sources in the same loader.
+#[cfg(feature = "async")]
+pub struct AsyncConfigLoader<S: ConfigSchema> {
+    sources: Vec<Box<dyn AsyncSource + Send + Sync>>,
+    migrations: Option<MigrationChain>,
+    encryptor: Option<Box<dyn Encryptor>>,
+    _phantom: std::marker::PhantomData<S>,
+}
+
+#[cfg(feature = "async")]
+impl<S: ConfigSchema> Default for AsyncConfigLoader<S> {
+    fn default() -> Self {
+        Self {
+            sources: Vec::new(),
+            migrations: None,
+            encryptor: None,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl<S: ConfigSchema> AsyncConfigLoader<S> {
+    #[must_use]
+    pub fn with_source(mut self, source: impl AsyncSource + 'static) -> Self {
+        self.sources.push(Box::new(source));
+        self
+    }
+
+    #[must_use]
+    pub fn with_migrations(mut self, migrations: MigrationChain) -> Self {
+        self.migrations = Some(migrations);
+        self
+    }
+
+    #[must_use]
+    pub fn with_encryptor(mut self, encryptor: impl Encryptor + 'static) -> Self {
+        self.encryptor = Some(Box::new(encryptor));
+        self
+    }
+
+    /// Drive all sources concurrently, merge results, run migrations, decrypt, deserialize.
+    ///
+    /// # Errors
+    /// Returns [`LoadError`] on source, migration, crypto, or deserialization failure.
+    pub async fn load(self) -> Result<S, LoadError> {
+        let strategies = S::field_strategies();
+
+        let mut merged = ConfigValue::Table(std::collections::BTreeMap::new());
+        for source in self.sources {
+            let collected = source.collect().await?;
             merged = merge(merged, collected, strategies);
         }
 

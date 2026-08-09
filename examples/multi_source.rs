@@ -1,7 +1,7 @@
 /// Merge from multiple sources in priority order:
 /// defaults < file < env vars < CLI args.
 ///
-/// Run: cargo run --example multi_source -- --port 9090
+/// Run: `cargo run --example multi_source -- --port 9090`
 use confex::{CliSource, ConfigLoader, ConfigSchema, ConfigValue, EnvSource, FileSource, TomlFormat};
 use serde::{Deserialize, Serialize};
 
@@ -24,8 +24,7 @@ fn main() {
                 let key = chunk[0].trim_start_matches('-').to_string();
                 let val: ConfigValue = chunk[1]
                     .parse::<i64>()
-                    .map(ConfigValue::Integer)
-                    .unwrap_or_else(|_| ConfigValue::String(chunk[1].clone()));
+                    .map_or_else(|_| ConfigValue::String(chunk[1].clone()), ConfigValue::Integer);
                 Some((key, val))
             } else {
                 None

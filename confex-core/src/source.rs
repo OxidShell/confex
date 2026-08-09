@@ -138,3 +138,46 @@ impl<F: Format> Source for FileSource<F> {
         self.format.parse(path, &bytes)
     }
 }
+
+// ── async source ──────────────────────────────────────────────────────────────
+
+/// Owned, boxed future returned by [`AsyncSource::collect`].
+#[cfg(feature = "async")]
+pub type CollectFuture<'a> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<ConfigValue, SourceError>> + Send + 'a>>;
+
+/// Async variant of [`Source`]. Implement this when collection requires I/O
+/// that must not block the async executor (e.g. HTTP fetches, cloud APIs).
+///
+/// # Implementing
+///
+/// ```rust,ignore
+/// use confex::{AsyncSource, CollectFuture, ConfigValue, SourceError};
+///
+/// struct RemoteSource { url: String }
+///
+/// impl AsyncSource for RemoteSource {
+///     fn collect(&self) -> CollectFuture<'_> {
+///         Box::pin(async move {
+///             // async HTTP fetch, parse, return ConfigValue
+///             todo!()
+///         })
+///     }
+/// }
+/// ```
+#[cfg(feature = "async")]
+pub trait AsyncSource: Send + Sync {
+    /// Asynchronously collect config values from this source.
+    ///
+    /// # Errors
+    /// Returns [`SourceError`] on I/O, parse, or network failure.
+    fn collect(&self) -> CollectFuture<'_>;
+}
+
+/// Every sync `Source` that is `Send + Sync` is also an `AsyncSource`.
+#[cfg(feature = "async")]
+impl<T: Source + Send + Sync> AsyncSource for T {
+    fn collect(&self) -> CollectFuture<'_> {
+        Box::pin(std::future::ready(Source::collect(self)))
+    }
+}
