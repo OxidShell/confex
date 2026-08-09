@@ -1,3 +1,22 @@
 [workspace]
-members = ["confex-core", "confex-macros", "confex"]
+members = ["confex-core", "confex-macros"]
 resolver = "2"
+
+[package]
+name = "confex"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["sqlite-backend", "hot-reload"]
+sqlite-backend = ["confex-core/sqlite-backend"]
+hot-reload = ["confex-core/hot-reload"]
+linux-keyring = ["confex-core/linux-keyring"]
+macos-keychain = ["confex-core/macos-keychain"]
+windows-dpapi = ["confex-core/windows-dpapi"]
+sealed-key = ["confex-core/sealed-key"]
+
+[dependencies]
+confex-core = { path = "confex-core" }
+confex-macros = { path = "confex-macros" }
+serde = { version = "1", features = ["derive"] }
