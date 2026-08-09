@@ -11,9 +11,7 @@ edition = "2024"
 default = ["sqlite-backend", "hot-reload"]
 sqlite-backend = ["confex-core/sqlite-backend"]
 hot-reload = ["confex-core/hot-reload"]
-linux-keyring = ["confex-core/linux-keyring"]
-macos-keychain = ["confex-core/macos-keychain"]
-windows-dpapi = ["confex-core/windows-dpapi"]
+native-keyring = ["confex-core/native-keyring"]
 sealed-key = ["confex-core/sealed-key"]
 
 [dependencies]

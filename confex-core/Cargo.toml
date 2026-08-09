@@ -6,9 +6,7 @@ edition = "2024"
 [features]
 sqlite-backend = ["dep:rusqlite"]
 hot-reload = ["dep:notify"]
-linux-keyring = ["dep:keyutils"]
-macos-keychain = ["dep:security-framework"]
-windows-dpapi = ["dep:windows"]
+native-keyring = ["dep:keyutils", "dep:security-framework", "dep:windows"]
 sealed-key = ["dep:argon2"]
 
 [dependencies]

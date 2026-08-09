@@ -82,12 +82,12 @@ impl KeyProvider for FileKeyProvider {
 ///
 /// Session-persistent: survives process restarts within the same login session
 /// but is lost on reboot. Requires the `linux-keyring` feature.
-#[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+#[cfg(all(target_os = "linux", feature = "native-keyring"))]
 #[derive(Debug, Default, Clone, Copy)]
 #[must_use]
 pub struct LinuxKeyring;
 
-#[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+#[cfg(all(target_os = "linux", feature = "native-keyring"))]
 impl KeyProvider for LinuxKeyring {
     fn key(&self, app_name: &str) -> Result<SecretKey, KeyError> {
         use keyutils::{Keyring, SpecialKeyring, keytypes::User};
@@ -124,12 +124,12 @@ impl KeyProvider for LinuxKeyring {
 /// Stores the key in the macOS Keychain under service `"confex"`.
 ///
 /// Requires the `macos-keychain` feature.
-#[cfg(all(target_os = "macos", feature = "macos-keychain"))]
+#[cfg(all(target_os = "macos", feature = "native-keyring"))]
 #[derive(Debug, Default, Clone, Copy)]
 #[must_use]
 pub struct MacOsKeychain;
 
-#[cfg(all(target_os = "macos", feature = "macos-keychain"))]
+#[cfg(all(target_os = "macos", feature = "native-keyring"))]
 impl KeyProvider for MacOsKeychain {
     fn key(&self, app_name: &str) -> Result<SecretKey, KeyError> {
         use security_framework::passwords::{get_generic_password, set_generic_password};
@@ -160,12 +160,12 @@ impl KeyProvider for MacOsKeychain {
 /// Stores a DPAPI-encrypted key blob at `blob_path`.
 ///
 /// Requires the `windows-dpapi` feature. Windows-only.
-#[cfg(all(windows, feature = "windows-dpapi"))]
+#[cfg(all(windows, feature = "native-keyring"))]
 pub struct WindowsDpapi {
     blob_path: PathBuf,
 }
 
-#[cfg(all(windows, feature = "windows-dpapi"))]
+#[cfg(all(windows, feature = "native-keyring"))]
 impl WindowsDpapi {
     #[must_use]
     pub fn new(blob_path: PathBuf) -> Self {
@@ -173,7 +173,7 @@ impl WindowsDpapi {
     }
 }
 
-#[cfg(all(windows, feature = "windows-dpapi"))]
+#[cfg(all(windows, feature = "native-keyring"))]
 impl KeyProvider for WindowsDpapi {
     fn key(&self, _app_name: &str) -> Result<SecretKey, KeyError> {
         if self.blob_path.exists() {
@@ -200,7 +200,7 @@ impl KeyProvider for WindowsDpapi {
     }
 }
 
-#[cfg(all(windows, feature = "windows-dpapi"))]
+#[cfg(all(windows, feature = "native-keyring"))]
 unsafe fn dpapi_protect(data: &[u8]) -> Result<Vec<u8>, KeyError> {
     use windows::{
         Win32::{
@@ -252,7 +252,7 @@ unsafe fn dpapi_protect(data: &[u8]) -> Result<Vec<u8>, KeyError> {
     Ok(result)
 }
 
-#[cfg(all(windows, feature = "windows-dpapi"))]
+#[cfg(all(windows, feature = "native-keyring"))]
 unsafe fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, KeyError> {
     use windows::{
         Win32::{
@@ -410,7 +410,7 @@ impl Unsealer for PassphraseUnsealer {
 // Linux keyring cache helpers (used by SealedFileKeyProvider)
 // ---------------------------------------------------------------------------
 
-#[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+#[cfg(all(target_os = "linux", feature = "native-keyring"))]
 fn keyring_read(description: &str) -> Option<[u8; 32]> {
     use keyutils::{Keyring, SpecialKeyring, keytypes::User};
 
@@ -420,7 +420,7 @@ fn keyring_read(description: &str) -> Option<[u8; 32]> {
     data.try_into().ok()
 }
 
-#[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+#[cfg(all(target_os = "linux", feature = "native-keyring"))]
 fn keyring_write(description: &str, raw: &[u8; 32]) {
     use keyutils::{Keyring, SpecialKeyring, keytypes::User};
 
@@ -455,11 +455,11 @@ impl<U: Unsealer> SealedFileKeyProvider<U> {
 #[cfg(feature = "sealed-key")]
 impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
     fn key(&self, _app_name: &str) -> Result<SecretKey, KeyError> {
-        #[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+        #[cfg(all(target_os = "linux", feature = "native-keyring"))]
         let cache_desc = format!("confex.sealed:{_app_name}");
 
         // Fast path: kernel keyring cache (Linux only).
-        #[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+        #[cfg(all(target_os = "linux", feature = "native-keyring"))]
         if let Some(raw) = keyring_read(&cache_desc) {
             return Ok(SecretKey(raw));
         }
@@ -468,7 +468,7 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
             let blob = fs::read(&self.path)?;
             let raw = self.unsealer.unseal(&blob)?;
 
-            #[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+            #[cfg(all(target_os = "linux", feature = "native-keyring"))]
             keyring_write(&cache_desc, &raw);
 
             return Ok(SecretKey(raw));
@@ -491,12 +491,29 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
             fs::set_permissions(&self.path, fs::Permissions::from_mode(0o600))?;
         }
 
-        #[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+        #[cfg(all(target_os = "linux", feature = "native-keyring"))]
         keyring_write(&cache_desc, &raw);
 
         Ok(SecretKey(raw))
     }
 }
+
+// ---------------------------------------------------------------------------
+// NativeKeyring alias — platform-transparent accessor
+// ---------------------------------------------------------------------------
+
+/// Platform-native keyring provider, selected at compile time.
+///
+/// - Linux: [`LinuxKeyring`] (kernel keyring, session-persistent)
+/// - macOS: [`MacOsKeychain`] (system Keychain, login-persistent)
+/// - Windows: not aliased — use [`WindowsDpapi`] directly (requires a blob path).
+///
+/// Requires the `native-keyring` feature.
+#[cfg(all(target_os = "linux", feature = "native-keyring"))]
+pub type NativeKeyring = LinuxKeyring;
+
+#[cfg(all(target_os = "macos", feature = "native-keyring"))]
+pub type NativeKeyring = MacOsKeychain;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -517,7 +534,7 @@ mod tests {
         assert_eq!(k1.as_bytes(), k2.as_bytes());
     }
 
-    #[cfg(all(target_os = "linux", feature = "linux-keyring"))]
+    #[cfg(all(target_os = "linux", feature = "native-keyring"))]
     #[test]
     fn linux_keyring_stores_and_retrieves() {
         // use unique description to avoid test collision

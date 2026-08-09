@@ -8,13 +8,10 @@ pub use confex_core::error::{CryptoError, KeyError, LoadError, MigrationError, S
 pub use confex_core::format::{Format, TomlFormat};
 pub use confex_core::key::{FileKeyProvider, KeyProvider, SecretKey};
 
-#[cfg(all(target_os = "linux", feature = "linux-keyring"))]
-pub use confex_core::key::LinuxKeyring;
+#[cfg(all(not(windows), feature = "native-keyring"))]
+pub use confex_core::key::NativeKeyring;
 
-#[cfg(all(target_os = "macos", feature = "macos-keychain"))]
-pub use confex_core::key::MacOsKeychain;
-
-#[cfg(all(windows, feature = "windows-dpapi"))]
+#[cfg(all(windows, feature = "native-keyring"))]
 pub use confex_core::key::WindowsDpapi;
 
 #[cfg(feature = "sealed-key")]
