@@ -23,10 +23,6 @@ pub trait KeyProvider {
     fn key(&self, app_name: &str) -> Result<SecretKey, KeyError>;
 }
 
-// ---------------------------------------------------------------------------
-// FileKeyProvider
-// ---------------------------------------------------------------------------
-
 /// Stores the key as a 32-byte file with permissions `0600` (Unix).
 ///
 /// Generates a new random key on first use and persists it.
@@ -73,14 +69,10 @@ impl KeyProvider for FileKeyProvider {
     }
 }
 
-// ---------------------------------------------------------------------------
-// LinuxKeyring
-// ---------------------------------------------------------------------------
-
 /// Stores the key in the Linux kernel keyring (User keyring).
 ///
 /// Session-persistent: survives process restarts within the same login session
-/// but is lost on reboot. Requires the `linux-keyring` feature.
+/// but is lost on reboot. Requires the `native-keyring` feature.
 #[cfg(all(target_os = "linux", feature = "native-keyring"))]
 #[derive(Debug, Default, Clone, Copy)]
 #[must_use]
@@ -116,13 +108,9 @@ impl KeyProvider for LinuxKeyring {
     }
 }
 
-// ---------------------------------------------------------------------------
-// MacOsKeychain
-// ---------------------------------------------------------------------------
-
 /// Stores the key in the macOS Keychain under service `"confex"`.
 ///
-/// Requires the `macos-keychain` feature.
+/// Requires the `native-keyring` feature.
 #[cfg(all(target_os = "macos", feature = "native-keyring"))]
 #[derive(Debug, Default, Clone, Copy)]
 #[must_use]
@@ -151,10 +139,6 @@ impl KeyProvider for MacOsKeychain {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// WindowsDpapi
-// ---------------------------------------------------------------------------
 
 /// Stores a DPAPI-encrypted key blob at `blob_path`.
 ///
@@ -301,10 +285,6 @@ unsafe fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, KeyError> {
     Ok(result)
 }
 
-// ---------------------------------------------------------------------------
-// Unsealer trait + PassphraseUnsealer
-// ---------------------------------------------------------------------------
-
 /// Pluggable strategy for wrapping and unwrapping a 32-byte key into/from an opaque blob.
 #[cfg(feature = "sealed-key")]
 pub trait Unsealer {
@@ -412,10 +392,6 @@ impl Unsealer for PassphraseUnsealer {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Linux keyring cache helpers (used by SealedFileKeyProvider)
-// ---------------------------------------------------------------------------
-
 #[cfg(all(target_os = "linux", feature = "native-keyring"))]
 fn keyring_read(description: &str) -> Option<[u8; 32]> {
     use keyutils::{Keyring, SpecialKeyring, keytypes::User};
@@ -435,10 +411,6 @@ fn keyring_write(description: &str, raw: &[u8; 32]) {
         let _ = keyring.add_key::<User>(description, raw.as_ref());
     }
 }
-
-// ---------------------------------------------------------------------------
-// SealedFileKeyProvider
-// ---------------------------------------------------------------------------
 
 /// Stores a sealed (encrypted) key blob on disk, using a pluggable [`Unsealer`].
 ///
@@ -464,7 +436,6 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
         #[cfg(all(target_os = "linux", feature = "native-keyring"))]
         let cache_desc = format!("confex.sealed:{_app_name}");
 
-        // Fast path: kernel keyring cache (Linux only).
         #[cfg(all(target_os = "linux", feature = "native-keyring"))]
         if let Some(raw) = keyring_read(&cache_desc) {
             return Ok(SecretKey(raw));
@@ -480,7 +451,6 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
             return Ok(SecretKey(raw));
         }
 
-        // Generate a new key, seal it, and persist the blob.
         let mut raw = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut raw);
 
@@ -504,10 +474,6 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// NativeKeyring alias — platform-transparent accessor
-// ---------------------------------------------------------------------------
-
 /// Platform-native keyring provider, selected at compile time.
 ///
 /// - Linux: [`LinuxKeyring`] (kernel keyring, session-persistent)
@@ -520,10 +486,6 @@ pub type NativeKeyring = LinuxKeyring;
 
 #[cfg(all(target_os = "macos", feature = "native-keyring"))]
 pub type NativeKeyring = MacOsKeychain;
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -543,7 +505,6 @@ mod tests {
     #[cfg(all(target_os = "linux", feature = "native-keyring"))]
     #[test]
     fn linux_keyring_stores_and_retrieves() {
-        // use unique description to avoid test collision
         let provider = LinuxKeyring;
         let app = "confex-test-keyring-42";
         let k1 = provider.key(app).unwrap();

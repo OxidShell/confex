@@ -35,8 +35,6 @@ pub trait ConfigSchema: DeserializeOwned + Serialize {
     }
 }
 
-// ── loader entry ──────────────────────────────────────────────────────────────
-
 /// One source in the loader's pipeline.
 ///
 /// `watch_paths` is populated only for entries added via
@@ -47,8 +45,6 @@ pub(crate) struct LoaderEntry {
     #[cfg(feature = "hot-reload")]
     pub(crate) watch_paths: Vec<std::path::PathBuf>,
 }
-
-// ── ConfigLoader ──────────────────────────────────────────────────────────────
 
 /// Builds and executes a layered configuration load.
 ///
@@ -177,8 +173,6 @@ impl<S: ConfigSchema> ConfigLoader<S> {
     }
 }
 
-// ── hot-reload ────────────────────────────────────────────────────────────────
-
 #[cfg(feature = "hot-reload")]
 impl<S: ConfigSchema + Clone + Send + Sync + 'static> ConfigLoader<S> {
     /// Full-pipeline hot-reload: every change to `watch_path` re-collects all
@@ -296,8 +290,6 @@ impl<S: ConfigSchema + Clone + Send + Sync + 'static> ConfigLoader<S> {
         )
     }
 }
-
-// ── async loader ──────────────────────────────────────────────────────────────
 
 /// Async variant of [`ConfigLoader`]. Sources are driven with `.await`; the
 /// executor (tokio, async-std, …) is provided by the caller.

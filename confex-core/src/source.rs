@@ -134,8 +134,6 @@ impl<F: Format> Source for FileSource<F> {
     }
 }
 
-// ── watchable source ─────────────────────────────────────────────────────────
-
 /// A [`Source`] that can declare which filesystem paths it monitors.
 ///
 /// Implemented by [`FileSource`] and [`SqliteSource`]. Passive sources (env
@@ -155,8 +153,6 @@ impl<F: Format + Send + Sync> WatchableSource for FileSource<F> {
         self.candidates.clone()
     }
 }
-
-// ── async source ──────────────────────────────────────────────────────────────
 
 /// Owned, boxed future returned by [`AsyncSource::collect`].
 #[cfg(feature = "async")]

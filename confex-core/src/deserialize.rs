@@ -7,8 +7,6 @@ use serde::{
 
 use crate::value::ConfigValue;
 
-// ── DeserializeError ──────────────────────────────────────────────────────────
-
 /// Error produced when deserializing a [`ConfigValue`] tree into a concrete type.
 #[derive(Debug)]
 pub struct DeserializeError(String);
@@ -32,8 +30,6 @@ impl ser::Error for DeserializeError {
         Self(msg.to_string())
     }
 }
-
-// ── ConfigValueDeserializer ───────────────────────────────────────────────────
 
 /// Drives serde deserialization directly from a [`ConfigValue`] tree.
 ///
@@ -116,8 +112,6 @@ fn unexpected(v: &ConfigValue) -> de::Unexpected<'_> {
     }
 }
 
-// ── SeqDeserializer ───────────────────────────────────────────────────────────
-
 struct SeqDeserializer(std::vec::IntoIter<ConfigValue>);
 
 impl<'de> de::SeqAccess<'de> for SeqDeserializer {
@@ -133,8 +127,6 @@ impl<'de> de::SeqAccess<'de> for SeqDeserializer {
         }
     }
 }
-
-// ── MapDeserializer ───────────────────────────────────────────────────────────
 
 struct MapDeserializer {
     iter: std::collections::btree_map::IntoIter<String, ConfigValue>,
@@ -175,8 +167,6 @@ impl<'de> de::MapAccess<'de> for MapDeserializer {
         seed.deserialize(ConfigValueDeserializer(v))
     }
 }
-
-// ── EnumDeserializer ──────────────────────────────────────────────────────────
 
 struct EnumDeserializer {
     variant: String,
@@ -220,12 +210,7 @@ impl<'de> de::VariantAccess<'de> for EnumDeserializer {
     }
 }
 
-// ── ConfigValueSerializer ─────────────────────────────────────────────────────
-
-/// Serializes any `T: Serialize` into a [`ConfigValue`] tree.
-///
-/// Used by [`crate::handle::WriteGuard`] to persist config changes to disk
-/// without requiring the `serde_json` crate.
+/// Serializes any `T: Serialize` into a [`ConfigValue`] tree without a `serde_json` dependency.
 pub struct ConfigValueSerializer;
 
 /// Serialize any `T: serde::Serialize` into a [`ConfigValue`].
@@ -351,8 +336,6 @@ impl ser::Serializer for ConfigValueSerializer {
         })
     }
 }
-
-// ── compound serializers ──────────────────────────────────────────────────────
 
 pub struct SeqSerializer(Vec<ConfigValue>);
 

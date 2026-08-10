@@ -17,8 +17,6 @@ use crate::{
 #[cfg(feature = "hot-reload")]
 use crate::error::LoadError;
 
-// ── errors ────────────────────────────────────────────────────────────────────
-
 #[derive(Debug)]
 pub enum HotReloadError {
     Watch(String),
@@ -61,8 +59,6 @@ impl From<crate::error::LoadError> for HotReloadError {
     }
 }
 
-// ── write-back helper ─────────────────────────────────────────────────────────
-
 pub(crate) struct FileWriteBack {
     path: PathBuf,
     format: Arc<dyn Format + Send + Sync>,
@@ -79,8 +75,6 @@ impl FileWriteBack {
     }
 }
 
-// ── watch options ─────────────────────────────────────────────────────────────
-
 /// Tuning options for the file watcher.
 #[derive(Debug, Clone, Copy)]
 pub struct WatchOptions {
@@ -95,8 +89,6 @@ impl Default for WatchOptions {
         }
     }
 }
-
-// ── handle ────────────────────────────────────────────────────────────────────
 
 /// Live, cloneable handle to a loaded config value.
 ///
@@ -153,8 +145,6 @@ impl<T: ConfigSchema + Clone + Serialize> ConfigHandle<T> {
         }
     }
 }
-
-// ── watcher mode ─────────────────────────────────────────────────────────────
 
 /// Keeps the file watcher alive. Drop to stop watching.
 #[cfg(feature = "hot-reload")]
@@ -244,7 +234,6 @@ fn watcher_loop<T: Send + Sync + 'static>(
                 Err(RecvTimeoutError::Disconnected) => return,
             }
         }
-        // Reload.
         match reload() {
             Ok(cfg) => {
                 swap.store(Arc::new(cfg));
@@ -256,8 +245,6 @@ fn watcher_loop<T: Send + Sync + 'static>(
         }
     }
 }
-
-// ── selective reload ──────────────────────────────────────────────────────────
 
 /// Per-source entry for selective hot-reload.
 ///
@@ -413,8 +400,6 @@ fn selective_watcher_loop<T: Send + Sync + 'static>(
     }
 }
 
-// ── write guard ───────────────────────────────────────────────────────────────
-
 /// Holds a mutable snapshot of `T`. On drop:
 ///
 /// 1. If a file path is configured, serializes and writes to disk.
@@ -455,8 +440,6 @@ impl<T: ConfigSchema + Clone + Serialize> Drop for WriteGuard<T> {
         self.swap.store(Arc::new(self.value.clone()));
     }
 }
-
-// ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {

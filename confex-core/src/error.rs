@@ -1,7 +1,5 @@
 use std::{fmt, path::PathBuf};
 
-// ── SourceError ───────────────────────────────────────────────────────────────
-
 #[derive(Debug)]
 pub enum SourceError {
     Io {
@@ -64,8 +62,6 @@ impl From<rusqlite::Error> for SourceError {
     }
 }
 
-// ── LoadError ─────────────────────────────────────────────────────────────────
-
 #[derive(Debug)]
 pub enum LoadError {
     Source(SourceError),
@@ -120,8 +116,6 @@ impl From<crate::deserialize::DeserializeError> for LoadError {
     }
 }
 
-// ── MigrationError ────────────────────────────────────────────────────────────
-
 #[derive(Debug)]
 pub enum MigrationError {
     NoPath { from: u32, to: u32 },
@@ -140,13 +134,6 @@ impl fmt::Display for MigrationError {
 }
 
 impl std::error::Error for MigrationError {}
-
-// ── KeyError ──────────────────────────────────────────────────────────────────
-//
-// Platform-specific variants carry the upstream error type directly so the
-// full error chain is preserved. Variants whose inner type comes from an
-// optional dep are cfg-gated; unit/String variants are unconditional since
-// they contain no feature-gated types.
 
 #[derive(Debug)]
 pub enum KeyError {
@@ -226,8 +213,6 @@ impl From<argon2::Error> for KeyError {
         Self::Kdf(e)
     }
 }
-
-// ── CryptoError ───────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 pub enum CryptoError {

@@ -11,8 +11,6 @@ use rusqlite::{Connection, params};
 
 use crate::{codec, error::SourceError, source::Source, value::ConfigValue};
 
-// ── connection helpers ────────────────────────────────────────────────────────
-
 fn open_wal(path: &Path) -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open(path)?;
     conn.busy_timeout(Duration::from_secs(5))?;
@@ -31,8 +29,6 @@ fn ensure_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
         );",
     )
 }
-
-// ── source (read) ─────────────────────────────────────────────────────────────
 
 /// Config source backed by a `SQLite` database in WAL mode.
 ///
@@ -161,8 +157,6 @@ impl Source for SqliteSource {
     }
 }
 
-// ── store (write) ─────────────────────────────────────────────────────────────
-
 /// Write handle for inserting or updating values in the SQLite store.
 pub struct SqliteStore {
     db_path: PathBuf,
@@ -258,8 +252,6 @@ fn insert_dot_path(table: &mut BTreeMap<String, ConfigValue>, key: &str, value: 
         }
     }
 }
-
-// ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -364,7 +356,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let db = Arc::new(dir.path().join("concurrent.db"));
 
-        // Seed the schema before spawning threads.
         SqliteStore::new(db.as_ref(), "myapp")
             .set("seed", &ConfigValue::Bool(true))
             .unwrap();

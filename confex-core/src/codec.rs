@@ -18,8 +18,6 @@ use std::collections::BTreeMap;
 
 use crate::{error::SourceError, value::ConfigValue};
 
-// ── encode ────────────────────────────────────────────────────────────────────
-
 pub(crate) fn encode(v: &ConfigValue) -> String {
     let mut out = String::new();
     write_value(v, &mut out);
@@ -68,8 +66,6 @@ fn write_value(v: &ConfigValue, out: &mut String) {
         }
     }
 }
-
-// ── decode ────────────────────────────────────────────────────────────────────
 
 pub(crate) fn decode(s: &str) -> Result<ConfigValue, SourceError> {
     let (val, rest) = parse_value(s)?;
@@ -170,8 +166,6 @@ fn split_delimiter(s: &str, delim: char) -> Result<(&str, &str), SourceError> {
             SourceError::Backend(format!("missing {delim:?} delimiter in {s:?}"))
         })
 }
-
-// ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
