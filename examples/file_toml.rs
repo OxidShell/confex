@@ -41,7 +41,7 @@ fn main() {
     {
         let config = ConfigLoader::<ServerConfig>::default()
             .with_source(FileSource::new([path], TomlFormat))
-            .with_source(EnvSource::from("SERVER"))
+            .with_source(EnvSource::default())
             .load()
             .expect("failed to load config");
 
@@ -59,7 +59,7 @@ fn main() {
 
         let (handle, _watcher) = ConfigLoader::<ServerConfig>::default()
             .with_watched_source(FileSource::new([path.clone()], TomlFormat))
-            .with_source(EnvSource::from("SERVER"))
+            .with_source(EnvSource::default())
             .watch_auto(WatchOptions::default())
             .expect("failed to start watcher");
 

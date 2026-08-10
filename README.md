@@ -46,11 +46,13 @@ struct Config {
 
 let config = ConfigLoader::<Config>::default()
     .with_source(FileSource::new(["config.toml".into()], TomlFormat))
-    .with_source(EnvSource::from("MYAPP"))  // MYAPP_HOST, MYAPP_PORT
+    .with_source(EnvSource::default())  // MYAPP_HOST, MYAPP_PORT (prefix from app_name)
     .load()?;
 ```
 
 Sources merge in registration order — last writer wins. `EnvSource` registered after `FileSource` overrides it.
+
+The `app_name` defined in `#[config(...)]` is automatically injected into sources that need it — `EnvSource` derives its prefix from it, `SqliteSource` uses it to scope the key-value store. Pass an explicit `EnvSource::from("CUSTOM")` to override the prefix.
 
 ## Hot-reload
 
@@ -61,7 +63,7 @@ use confex::WatchOptions;
 // Env var overrides are passive — sampled once at startup, never re-read.
 let (handle, _watcher) = ConfigLoader::<Config>::default()
     .with_watched_source(FileSource::new(["config.toml".into()], TomlFormat))
-    .with_source(EnvSource::from("MYAPP"))
+    .with_source(EnvSource::default())
     .watch_auto(WatchOptions::default())?;
 
 // Lock-free read from any thread.
@@ -77,18 +79,19 @@ If the merged result after re-collection is identical to the previous one (e.g. 
 ```rust
 use confex::{SqliteSource, SqliteStore, ConfigValue};
 
-let store = SqliteStore::new("prefs.db", "myapp");
+// SqliteStore needs an explicit name for direct write access.
+let store = SqliteStore::new("prefs.db", Prefs::APP_NAME);
 store.set("theme", &ConfigValue::String("dark".into()))?;
 
-// One-shot
+// One-shot — app_name injected automatically from the schema type.
 let config = ConfigLoader::<Prefs>::default()
-    .with_source(SqliteSource::new("prefs.db", "myapp"))
+    .with_source(SqliteSource::new("prefs.db"))
     .load()?;
 
-// Live, reacts to writes from other processes
+// Live, reacts to writes from other processes.
 let (handle, _watcher) = ConfigLoader::<Prefs>::default()
-    .with_watched_source(SqliteSource::new("prefs.db", "myapp"))
-    .with_source(EnvSource::from("PREFS"))
+    .with_watched_source(SqliteSource::new("prefs.db"))
+    .with_source(EnvSource::default())
     .watch_auto(WatchOptions::default())?;
 ```
 
@@ -148,7 +151,7 @@ let handle = ConfigHandle::from(config);
 ## Examples
 
 ```
-cargo run --example hot_reload
+cargo run --example hot_reload --features hot-reload
 cargo run --example sqlite_store --features sqlite-backend
 cargo run --example multi_source -- --port 9090
 cargo run --example migration

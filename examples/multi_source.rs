@@ -42,7 +42,7 @@ fn main() {
     {
         let config = ConfigLoader::<Config>::default()
             .with_source(FileSource::new(["app.toml".into()], TomlFormat)) // lowest priority
-            .with_source(EnvSource::from("APP"))
+            .with_source(EnvSource::default())
             .with_source(cli_source()) // highest priority
             .load()
             .expect("failed to load config");
@@ -60,7 +60,7 @@ fn main() {
 
         let (handle, _watcher) = ConfigLoader::<Config>::default()
             .with_watched_source(FileSource::new(["app.toml".into()], TomlFormat))
-            .with_source(EnvSource::from("APP"))
+            .with_source(EnvSource::default())
             .with_source(cli_source())
             .watch_auto(WatchOptions::default())
             .expect("failed to start watcher");

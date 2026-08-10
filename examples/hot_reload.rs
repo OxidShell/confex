@@ -45,7 +45,7 @@ fn main() {
     // file once at startup and are never re-sampled from the environment.
     let (handle, _watcher) = ConfigLoader::<ServerConfig>::default()
         .with_watched_source(FileSource::new([config_path.clone()], TomlFormat))
-        .with_source(EnvSource::from("SERVER"))
+        .with_source(EnvSource::default())
         .watch_auto(WatchOptions::default())
         .expect("failed to start watcher");
 
