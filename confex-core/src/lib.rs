@@ -2,6 +2,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 pub mod config;
+pub(crate) mod codec;
+pub mod deserialize;
 pub mod crypto;
 pub mod error;
 pub mod format;

@@ -4,6 +4,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
     crypto::{Encryptor, decrypt_fields},
+    deserialize::ConfigValueDeserializer,
     error::LoadError,
     merge::{FieldStrategies, merge},
     migrate::MigrationChain,
@@ -105,8 +106,7 @@ impl<S: ConfigSchema> ConfigLoader<S> {
             decrypt_fields(&mut merged, S::encrypted_fields(), enc.as_ref())?;
         }
 
-        let json: serde_json::Value = merged.into();
-        Ok(serde_json::from_value(json)?)
+        Ok(S::deserialize(ConfigValueDeserializer(merged))?)
     }
 }
 
@@ -188,7 +188,6 @@ impl<S: ConfigSchema> AsyncConfigLoader<S> {
             decrypt_fields(&mut merged, S::encrypted_fields(), enc.as_ref())?;
         }
 
-        let json: serde_json::Value = merged.into();
-        Ok(serde_json::from_value(json)?)
+        Ok(S::deserialize(ConfigValueDeserializer(merged))?)
     }
 }

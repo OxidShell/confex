@@ -41,28 +41,16 @@ impl Source for EnvSource {
             let Some(stripped) = key.strip_prefix(&prefix) else {
                 continue;
             };
-            let path: Vec<String> = stripped.to_lowercase().split("__").map(String::from).collect();
-            insert_nested(&mut table, &path, parse_env_value(&val));
+            let path: Vec<String> = stripped
+                .to_lowercase()
+                .split("__")
+                .map(String::from)
+                .collect();
+            insert_nested(&mut table, &path, val.parse().unwrap());
         }
 
         Ok(ConfigValue::Table(table))
     }
-}
-
-fn parse_env_value(s: &str) -> ConfigValue {
-    if s.eq_ignore_ascii_case("true") {
-        return ConfigValue::Bool(true);
-    }
-    if s.eq_ignore_ascii_case("false") {
-        return ConfigValue::Bool(false);
-    }
-    if let Ok(i) = s.parse::<i64>() {
-        return ConfigValue::Integer(i);
-    }
-    if let Ok(f) = s.parse::<f64>() {
-        return ConfigValue::Float(f);
-    }
-    ConfigValue::String(s.to_owned())
 }
 
 fn insert_nested(table: &mut BTreeMap<String, ConfigValue>, path: &[String], value: ConfigValue) {
@@ -112,8 +100,11 @@ pub struct FileSource<F: Format> {
 
 impl<F: Format> FileSource<F> {
     #[must_use]
-    pub fn new(candidates: Vec<PathBuf>, format: F) -> Self {
-        Self { candidates, format }
+    pub fn new(candidates: impl IntoIterator<Item = PathBuf>, format: F) -> Self {
+        Self {
+            candidates: candidates.into_iter().collect(),
+            format,
+        }
     }
 
     /// Returns the first candidate path that exists, or `None`.
@@ -143,8 +134,9 @@ impl<F: Format> Source for FileSource<F> {
 
 /// Owned, boxed future returned by [`AsyncSource::collect`].
 #[cfg(feature = "async")]
-pub type CollectFuture<'a> =
-    std::pin::Pin<Box<dyn std::future::Future<Output = Result<ConfigValue, SourceError>> + Send + 'a>>;
+pub type CollectFuture<'a> = std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<ConfigValue, SourceError>> + Send + 'a>,
+>;
 
 /// Async variant of [`Source`]. Implement this when collection requires I/O
 /// that must not block the async executor (e.g. HTTP fetches, cloud APIs).

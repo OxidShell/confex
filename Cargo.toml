@@ -8,12 +8,14 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["sqlite-backend", "hot-reload"]
+default = ["sqlite-backend", "hot-reload", "toml"]
 sqlite-backend = ["confex-core/sqlite-backend"]
 hot-reload = ["confex-core/hot-reload"]
 native-keyring = ["confex-core/native-keyring"]
 sealed-key = ["confex-core/sealed-key"]
 async = ["confex-core/async"]
+json = ["confex-core/json"]
+toml = ["confex-core/toml"]
 
 [dependencies]
 confex-core = { path = "confex-core" }

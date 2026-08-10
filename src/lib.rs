@@ -5,7 +5,9 @@ pub use confex_core::crypto::{
     Aes256GcmEncryptor, EncryptedFormat, Encryptor, decrypt_fields, encrypt_fields,
 };
 pub use confex_core::error::{CryptoError, KeyError, LoadError, MigrationError, SourceError};
-pub use confex_core::format::{Format, TomlFormat};
+pub use confex_core::format::Format;
+#[cfg(feature = "toml")]
+pub use confex_core::format::TomlFormat;
 pub use confex_core::key::{FileKeyProvider, KeyProvider, SecretKey};
 
 #[cfg(all(not(windows), feature = "native-keyring"))]

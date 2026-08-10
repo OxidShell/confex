@@ -94,11 +94,11 @@ impl KeyProvider for LinuxKeyring {
 
         let description = format!("confex:{app_name}");
         let mut keyring = Keyring::attach_or_create(SpecialKeyring::User)
-            .map_err(|e| KeyError::Keyring(e.to_string()))?;
+            .map_err(KeyError::Keyring)?;
 
         match keyring.search_for_key::<User>(description.as_str(), None) {
             Ok(key) => {
-                let data = key.read().map_err(|e| KeyError::Keyring(e.to_string()))?;
+                let data = key.read().map_err(KeyError::Keyring)?;
                 let len = data.len();
                 let raw: [u8; 32] = data
                     .try_into()
@@ -110,7 +110,7 @@ impl KeyProvider for LinuxKeyring {
                 rand::thread_rng().fill_bytes(&mut raw);
                 keyring
                     .add_key::<User>(description.as_str(), raw.as_ref())
-                    .map_err(|e| KeyError::Keyring(e.to_string()))?;
+                    .map_err(KeyError::Keyring)?;
                 Ok(SecretKey(raw))
             }
         }
@@ -146,7 +146,7 @@ impl KeyProvider for MacOsKeychain {
                 let mut raw = [0u8; 32];
                 rand::thread_rng().fill_bytes(&mut raw);
                 set_generic_password("confex", app_name, &raw)
-                    .map_err(|e| KeyError::Keychain(e.to_string()))?;
+                    .map_err(KeyError::Keychain)?;
                 Ok(SecretKey(raw))
             }
         }
@@ -355,12 +355,12 @@ impl PassphraseUnsealer {
         use argon2::{Algorithm, Argon2, Params, Version};
 
         let params =
-            Params::new(65_536, 3, 4, Some(32)).map_err(|_| KeyError::Kdf)?;
+            Params::new(65_536, 3, 4, Some(32)).map_err(KeyError::Kdf)?;
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut kek = [0u8; 32];
         argon2
             .hash_password_into(self.passphrase.as_bytes(), salt, &mut kek)
-            .map_err(|_| KeyError::Kdf)?;
+            .map_err(KeyError::Kdf)?;
         Ok(kek)
     }
 }

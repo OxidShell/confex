@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum ConfigValue {
@@ -65,6 +66,27 @@ impl From<&str> for ConfigValue {
     }
 }
 
+impl FromStr for ConfigValue {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("true") {
+            return Ok(Self::Bool(true));
+        }
+        if s.eq_ignore_ascii_case("false") {
+            return Ok(Self::Bool(false));
+        }
+        if let Ok(i) = s.parse::<i64>() {
+            return Ok(Self::Integer(i));
+        }
+        if let Ok(f) = s.parse::<f64>() {
+            return Ok(Self::Float(f));
+        }
+        Ok(Self::String(s.to_owned()))
+    }
+}
+
+#[cfg(feature = "json")]
 impl From<serde_json::Value> for ConfigValue {
     fn from(v: serde_json::Value) -> Self {
         match v {
@@ -76,9 +98,7 @@ impl From<serde_json::Value> for ConfigValue {
                 .or_else(|| n.as_f64().map(Self::Float))
                 .unwrap_or(Self::Null),
             serde_json::Value::String(s) => Self::String(s),
-            serde_json::Value::Array(arr) => {
-                Self::Array(arr.into_iter().map(Self::from).collect())
-            }
+            serde_json::Value::Array(arr) => Self::Array(arr.into_iter().map(Self::from).collect()),
             serde_json::Value::Object(map) => {
                 Self::Table(map.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
             }
@@ -86,6 +106,7 @@ impl From<serde_json::Value> for ConfigValue {
     }
 }
 
+#[cfg(feature = "json")]
 impl From<ConfigValue> for serde_json::Value {
     fn from(v: ConfigValue) -> Self {
         match v {
@@ -100,6 +121,45 @@ impl From<ConfigValue> for serde_json::Value {
             ConfigValue::Table(map) => {
                 Self::Object(map.into_iter().map(|(k, v)| (k, v.into())).collect())
             }
+        }
+    }
+}
+
+#[cfg(feature = "toml")]
+impl From<toml::Value> for ConfigValue {
+    fn from(v: toml::Value) -> Self {
+        match v {
+            toml::Value::Boolean(b) => ConfigValue::Bool(b),
+            toml::Value::Integer(i) => ConfigValue::Integer(i),
+            toml::Value::Float(f) => ConfigValue::Float(f),
+            toml::Value::String(s) => ConfigValue::String(s),
+            toml::Value::Array(arr) => {
+                ConfigValue::Array(arr.into_iter().map(Self::from).collect())
+            }
+            toml::Value::Table(map) => {
+                ConfigValue::Table(map.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
+            }
+            toml::Value::Datetime(dt) => ConfigValue::String(dt.to_string()),
+        }
+    }
+}
+
+#[cfg(feature = "toml")]
+impl From<ConfigValue> for toml::Value {
+    fn from(v: ConfigValue) -> Self {
+        match v {
+            // TOML has no null; map to empty string as lossy fallback
+            ConfigValue::Null => toml::Value::Table(toml::map::Map::default()),
+            ConfigValue::Bool(b) => toml::Value::Boolean(b),
+            ConfigValue::Integer(i) => toml::Value::Integer(i),
+            ConfigValue::Float(f) => toml::Value::Float(f),
+            ConfigValue::String(s) => toml::Value::String(s),
+            ConfigValue::Array(arr) => {
+                toml::Value::Array(arr.into_iter().map(Self::from).collect())
+            }
+            ConfigValue::Table(map) => toml::Value::Table(
+                map.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
+            ),
         }
     }
 }

@@ -6,10 +6,10 @@ use std::{
 
 use arc_swap::ArcSwap;
 use serde::Serialize;
-use thiserror::Error;
 
 use crate::{
     config::ConfigSchema,
+    deserialize::to_config_value,
     format::Format,
     value::ConfigValue,
 };
@@ -19,14 +19,36 @@ use crate::error::LoadError;
 
 // ── errors ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum HotReloadError {
-    #[error("failed to set up file watcher: {0}")]
     Watch(String),
-    #[error("failed to serialize config: {0}")]
     Serialize(String),
-    #[error("I/O error persisting config: {0}")]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
+}
+
+impl std::fmt::Display for HotReloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Watch(msg) => write!(f, "failed to set up file watcher: {msg}"),
+            Self::Serialize(msg) => write!(f, "failed to serialize config: {msg}"),
+            Self::Io(e) => write!(f, "I/O error persisting config: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for HotReloadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for HotReloadError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
 }
 
 // ── write-back helper ─────────────────────────────────────────────────────────
@@ -255,7 +277,7 @@ impl<T: ConfigSchema + Clone + Serialize> DerefMut for WriteGuard<T> {
 impl<T: ConfigSchema + Clone + Serialize> Drop for WriteGuard<T> {
     fn drop(&mut self) {
         if let Some(wb) = &self.write_back {
-            match serde_json::to_value(&self.value).map(ConfigValue::from) {
+            match to_config_value(&self.value) {
                 Ok(cv) => {
                     if let Err(e) = wb.persist(&cv) {
                         tracing::error!("failed to write config to disk: {e}");
@@ -337,8 +359,7 @@ mod tests {
             move || {
                 let src = FileSource::new(vec![path_clone.clone()], TomlFormat);
                 let cv = src.collect()?;
-                let json: serde_json::Value = cv.into();
-                Ok(serde_json::from_value(json)?)
+                Ok(serde::de::Deserialize::deserialize(crate::deserialize::ConfigValueDeserializer(cv))?)
             },
             WatchOptions::default(),
         )
