@@ -53,7 +53,7 @@ impl From<std::io::Error> for HotReloadError {
 
 // ── write-back helper ─────────────────────────────────────────────────────────
 
-struct FileWriteBack {
+pub(crate) struct FileWriteBack {
     path: PathBuf,
     format: Arc<dyn Format + Send + Sync>,
 }
@@ -164,49 +164,49 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
     /// Returns [`HotReloadError::Watch`] if the file watcher cannot be initialised.
     pub fn watch(
         initial: T,
-        path: PathBuf,
+        path: &std::path::Path,
         format: impl Format + Send + Sync + 'static,
         reload: impl Fn() -> Result<T, LoadError> + Send + Sync + 'static,
         options: WatchOptions,
+    ) -> Result<(Self, WatcherHandle), HotReloadError> {
+        let write_back = Some(Arc::new(FileWriteBack {
+            path: path.to_path_buf(),
+            format: Arc::new(format),
+        }));
+        let reload: Arc<dyn Fn() -> Result<T, LoadError> + Send + Sync> = Arc::new(reload);
+        Self::spawn_watcher(initial, path, &reload, write_back, options.debounce)
+    }
+
+    /// Shared watcher setup used by both file-backed and `SQLite`-backed watch modes.
+    pub(crate) fn spawn_watcher(
+        initial: T,
+        watch_path: &std::path::Path,
+        reload: &Arc<dyn Fn() -> Result<T, LoadError> + Send + Sync>,
+        write_back: Option<Arc<FileWriteBack>>,
+        debounce: std::time::Duration,
     ) -> Result<(Self, WatcherHandle), HotReloadError> {
         use notify::{Config, RecursiveMode, Watcher as _};
         use std::sync::mpsc;
 
         let swap = Arc::new(ArcSwap::from_pointee(initial));
         let swap_bg = Arc::clone(&swap);
-        let reload: Arc<dyn Fn() -> Result<T, LoadError> + Send + Sync> = Arc::new(reload);
-        let reload_bg = Arc::clone(&reload);
-        let debounce = options.debounce;
+        let reload_bg = Arc::clone(reload);
 
         let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
         let mut watcher =
             notify::RecommendedWatcher::new(move |ev| { let _ = tx.send(ev); }, Config::default())
                 .map_err(|e| HotReloadError::Watch(e.to_string()))?;
 
-        // Borrow before moving path into FileWriteBack.
         watcher
-            .watch(&path, RecursiveMode::NonRecursive)
+            .watch(watch_path, RecursiveMode::NonRecursive)
             .map_err(|e| HotReloadError::Watch(e.to_string()))?;
-
-        let write_back = Arc::new(FileWriteBack {
-            path,
-            format: Arc::new(format),
-        });
 
         std::thread::Builder::new()
             .name("confex-watcher".into())
             .spawn(move || watcher_loop(&rx, &swap_bg, &reload_bg, debounce))
             .map_err(HotReloadError::Io)?;
 
-        Ok((
-            Self {
-                swap,
-                write_back: Some(write_back),
-            },
-            WatcherHandle {
-                _watcher: watcher,
-            },
-        ))
+        Ok((Self { swap, write_back }, WatcherHandle { _watcher: watcher }))
     }
 }
 
@@ -354,7 +354,7 @@ mod tests {
         let path_clone = path.clone();
         let (handle, _watcher) = ConfigHandle::watch(
             Cfg { value: 1 },
-            path.clone(),
+            &path,
             TomlFormat,
             move || {
                 let src = FileSource::new(vec![path_clone.clone()], TomlFormat);

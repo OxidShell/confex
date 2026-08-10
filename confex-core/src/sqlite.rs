@@ -34,12 +34,13 @@ fn ensure_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 
 // ── source (read) ─────────────────────────────────────────────────────────────
 
-/// Config source backed by a SQLite database in WAL mode.
+/// Config source backed by a `SQLite` database in WAL mode.
 ///
 /// Keys use dot notation for nesting: `"window.width"` expands to
 /// `{ "window": { "width": … } }`. Values are JSON-encoded `ConfigValue`s.
 ///
 /// Safe for concurrent access from multiple processes; WAL handles the isolation.
+#[derive(Clone)]
 pub struct SqliteSource {
     db_path: PathBuf,
     app_name: String,
@@ -62,6 +63,59 @@ impl SqliteSource {
             db_path: self.db_path.clone(),
             app_name: self.app_name.clone(),
         }
+    }
+}
+
+/// Hot-reload support for `SQLite`-backed config.
+///
+/// Watches the directory containing the database file so that WAL writes from
+/// other processes are detected without waiting for a checkpoint.
+#[cfg(feature = "hot-reload")]
+impl SqliteSource {
+    /// Watch this database for changes and reload automatically.
+    ///
+    /// Unlike file-based hot-reload, writes to the config should go through
+    /// [`SqliteStore`] rather than [`crate::handle::WriteGuard`], which has no
+    /// write-back path in this mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::handle::HotReloadError::Watch`] if the watcher cannot be initialised.
+    pub fn watch<T>(
+        &self,
+        initial: T,
+        options: crate::handle::WatchOptions,
+    ) -> Result<
+        (crate::handle::ConfigHandle<T>, crate::handle::WatcherHandle),
+        crate::handle::HotReloadError,
+    >
+    where
+        T: crate::config::ConfigSchema
+            + Clone
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+    {
+        use std::sync::Arc;
+
+        let source = self.clone();
+        let reload: Arc<dyn Fn() -> Result<T, crate::error::LoadError> + Send + Sync> =
+            Arc::new(move || {
+                let cv = source.collect()?;
+                serde::Deserialize::deserialize(crate::deserialize::ConfigValueDeserializer(cv))
+                    .map_err(Into::into)
+            });
+
+        // Watch the parent directory so WAL-file writes are detected immediately.
+        let watch_path = self.db_path.parent().unwrap_or(&self.db_path);
+        crate::handle::ConfigHandle::spawn_watcher(
+            initial,
+            watch_path,
+            &reload,
+            None,
+            options.debounce,
+        )
     }
 }
 
@@ -335,5 +389,43 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[cfg(feature = "hot-reload")]
+    #[test]
+    fn sqlite_watch_detects_cross_process_write() {
+        use crate::{config::ConfigSchema, handle::WatchOptions, merge::FieldStrategies};
+        use serde::{Deserialize, Serialize};
+        use std::{thread, time::Duration};
+
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        struct Cfg {
+            port: i64,
+        }
+        impl ConfigSchema for Cfg {
+            const APP_NAME: &'static str = "watch_test";
+            const SCHEMA_VERSION: u32 = 1;
+            fn field_strategies() -> FieldStrategies { &[] }
+            fn encrypted_fields() -> &'static [&'static str] { &[] }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("watch.db");
+
+        let store = SqliteStore::new(&db, "watch_test");
+        store.set("port", &ConfigValue::Integer(3000)).unwrap();
+
+        let source = SqliteSource::new(&db, "watch_test");
+        let (handle, _watcher) = source
+            .watch(Cfg { port: 3000 }, WatchOptions::default())
+            .unwrap();
+
+        assert_eq!(handle.read().port, 3000);
+
+        // Simulate another process writing to the same DB.
+        store.set("port", &ConfigValue::Integer(9090)).unwrap();
+        thread::sleep(Duration::from_millis(600));
+
+        assert_eq!(handle.read().port, 9090);
     }
 }
