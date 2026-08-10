@@ -12,6 +12,21 @@ pub trait Source {
     /// # Errors
     /// Returns [`SourceError`] on I/O, parse, or environment variable errors.
     fn collect(&self) -> Result<ConfigValue, SourceError>;
+
+    /// Inject the application name derived from [`crate::config::ConfigSchema::APP_NAME`].
+    ///
+    /// Called automatically by [`crate::config::ConfigLoader::with_source`] and
+    /// [`crate::config::ConfigLoader::with_watched_source`] before the source is
+    /// stored. The default is a no-op; override it for sources that use the app
+    /// name to scope their data (e.g. `SqliteSource`, `EnvSource`). The name
+    /// must not override an explicit value already set on the source.
+    #[must_use]
+    fn with_app_name(self, _name: &str) -> Self
+    where
+        Self: Sized,
+    {
+        self
+    }
 }
 
 /// Reads config from environment variables with a given prefix.
@@ -19,6 +34,7 @@ pub trait Source {
 /// `PREFIX_WINDOW__WIDTH=1024` → `{ "window": { "width": 1024 } }`
 ///
 /// Double-underscore (`__`) is the nested key separator.
+#[derive(Default)]
 pub struct EnvSource {
     prefix: String,
 }
@@ -38,7 +54,17 @@ impl From<&str> for EnvSource {
 }
 
 impl Source for EnvSource {
+    fn with_app_name(mut self, name: &str) -> Self {
+        if self.prefix.is_empty() {
+            name.clone_into(&mut self.prefix);
+        }
+        self
+    }
+
     fn collect(&self) -> Result<ConfigValue, SourceError> {
+        if self.prefix.is_empty() {
+            return Ok(ConfigValue::Table(BTreeMap::new()));
+        }
         let prefix = format!("{}_", self.prefix.to_uppercase());
         let mut table = BTreeMap::new();
 

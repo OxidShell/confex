@@ -30,37 +30,33 @@ fn main() {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("prefs.db");
 
-    // Write some preferences via the store handle.
-    let store = SqliteStore::new(&db_path, "prefs");
+    let store = SqliteStore::new(&db_path, Prefs::APP_NAME);
     store.set("theme", &ConfigValue::String("dark".into())).expect("set failed");
     store.set("font_size", &ConfigValue::Integer(14)).expect("set failed");
 
-    // ── One-shot load (always available) ─────────────────────────────────────
-    // Merges SQLite source with env var overrides (PREFS_THEME, PREFS_FONT_SIZE…).
+    // app_name and env prefix are injected automatically from `#[config(app_name = "prefs")]`.
     let config = ConfigLoader::<Prefs>::default()
-        .with_source(SqliteSource::new(&db_path, "prefs"))
-        .with_source(EnvSource::from("PREFS"))
+        .with_source(SqliteSource::new(&db_path))
+        .with_source(EnvSource::default())
         .load()
         .expect("failed to load config");
 
     println!("one-shot — theme={} font_size={}", config.theme, config.font_size);
 
-    // ── Live handle (hot-reload feature) ─────────────────────────────────────
     #[cfg(feature = "hot-reload")]
     {
         use confex::WatchOptions;
 
-        // Option A: SqliteSource::watch — simplest, pure SQLite watcher
-        let source = SqliteSource::new(&db_path, "prefs");
-        let (handle_a, _watcher_a) = source
+        // Option A: SqliteSource::watch — infers app_name from Prefs::APP_NAME automatically.
+        let (handle_a, _watcher_a) = SqliteSource::new(&db_path)
             .watch::<Prefs>(WatchOptions::default())
             .expect("failed to start sqlite watcher");
         println!("live (sqlite) — theme={}", handle_a.read().theme);
 
-        // Option B: selective reload — env vars are passive, only SQLite triggers reload
+        // Option B: selective reload — env vars are passive, only SQLite triggers reload.
         let (handle_b, _watcher_b) = ConfigLoader::<Prefs>::default()
-            .with_source(EnvSource::from("PREFS"))
-            .with_watched_source(SqliteSource::new(&db_path, "prefs"))
+            .with_source(EnvSource::default())
+            .with_watched_source(SqliteSource::new(&db_path))
             .watch_auto(WatchOptions::default())
             .expect("failed to start selective watcher");
         println!("live (selective) — theme={}", handle_b.read().theme);

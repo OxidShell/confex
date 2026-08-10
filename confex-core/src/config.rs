@@ -98,6 +98,7 @@ impl<S: ConfigSchema> ConfigLoader<S> {
     /// file-backed or `SQLite` sources that should trigger selective reloads.
     #[must_use]
     pub fn with_source(mut self, source: impl Source + Send + Sync + 'static) -> Self {
+        let source = source.with_app_name(S::APP_NAME);
         self.entries.push(LoaderEntry {
             source: std::sync::Arc::new(source),
             #[cfg(feature = "hot-reload")]
@@ -118,6 +119,7 @@ impl<S: ConfigSchema> ConfigLoader<S> {
         mut self,
         source: impl crate::source::WatchableSource + 'static,
     ) -> Self {
+        let source = source.with_app_name(S::APP_NAME);
         let watch_paths = source.watch_paths();
         self.entries.push(LoaderEntry {
             source: std::sync::Arc::new(source),

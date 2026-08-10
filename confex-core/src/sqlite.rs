@@ -36,28 +36,41 @@ fn ensure_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 /// `{ "window": { "width": … } }`. Values are JSON-encoded `ConfigValue`s.
 ///
 /// Safe for concurrent access from multiple processes; WAL handles the isolation.
+///
+/// The `app_name` scope is injected automatically when the source is added to a
+/// [`crate::config::ConfigLoader`] via `with_source` or `with_watched_source`.
+/// When using `watch` directly (without `ConfigLoader`), the app name is inferred
+/// from the schema type's `APP_NAME` constant.
 #[derive(Clone)]
 pub struct SqliteSource {
     db_path: PathBuf,
-    app_name: String,
+    app_name: Option<String>,
 }
 
 impl SqliteSource {
-    /// Create a source pointing at `db_path` scoped to `app_name`.
+    /// Create a source pointing at `db_path`.
+    ///
+    /// The `app_name` scope is filled in automatically by `ConfigLoader` or inferred
+    /// from the schema type when calling `watch`. Pass the source to
+    /// [`crate::config::ConfigLoader::with_source`] rather than setting the name
+    /// manually in most cases.
     #[must_use]
-    pub fn new(db_path: impl Into<PathBuf>, app_name: impl Into<String>) -> Self {
+    pub fn new(db_path: impl Into<PathBuf>) -> Self {
         Self {
             db_path: db_path.into(),
-            app_name: app_name.into(),
+            app_name: None,
         }
     }
 
     /// Return a write handle for the same database and app scope.
+    ///
+    /// Valid only after the source has been given an app name (via `ConfigLoader`
+    /// or an explicit `Source::with_app_name` call).
     #[must_use]
     pub fn store(&self) -> SqliteStore {
         SqliteStore {
             db_path: self.db_path.clone(),
-            app_name: self.app_name.clone(),
+            app_name: self.app_name.clone().unwrap_or_default(),
         }
     }
 }
@@ -98,17 +111,25 @@ impl SqliteSource {
     {
         use std::sync::Arc;
 
+        let resolved = Self {
+            app_name: Some(
+                self.app_name
+                    .clone()
+                    .unwrap_or_else(|| T::APP_NAME.to_owned()),
+            ),
+            ..self.clone()
+        };
+
         let load = |src: &Self| -> Result<T, crate::error::LoadError> {
             let cv = src.collect()?;
             serde::Deserialize::deserialize(crate::deserialize::ConfigValueDeserializer(cv))
                 .map_err(Into::into)
         };
 
-        let initial = load(self)?;
+        let initial = load(&resolved)?;
 
-        let source = self.clone();
         let reload: Arc<dyn Fn() -> Result<T, crate::error::LoadError> + Send + Sync> =
-            Arc::new(move || load(&source));
+            Arc::new(move || load(&resolved));
 
         let watch_path = self.db_path.parent().unwrap_or(&self.db_path);
         crate::handle::ConfigHandle::spawn_watcher(
@@ -133,7 +154,19 @@ impl crate::source::WatchableSource for SqliteSource {
 }
 
 impl Source for SqliteSource {
+    fn with_app_name(mut self, name: &str) -> Self {
+        if self.app_name.is_none() {
+            self.app_name = Some(name.to_owned());
+        }
+        self
+    }
+
     fn collect(&self) -> Result<ConfigValue, SourceError> {
+        let app_name = match self.app_name.as_deref() {
+            Some(n) if !n.is_empty() => n,
+            _ => return Ok(ConfigValue::Table(BTreeMap::new())),
+        };
+
         if !self.db_path.exists() {
             return Ok(ConfigValue::Table(BTreeMap::new()));
         }
@@ -145,7 +178,7 @@ impl Source for SqliteSource {
             .prepare("SELECT key, value FROM kv WHERE app_name = ?1 ORDER BY key")?;
 
         let pairs: Vec<(String, String)> = stmt
-            .query_map(params![self.app_name], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .query_map(params![app_name], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?;
 
         let mut table: BTreeMap<String, ConfigValue> = BTreeMap::new();
@@ -256,6 +289,7 @@ fn insert_dot_path(table: &mut BTreeMap<String, ConfigValue>, key: &str, value: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::source::Source as _;
     use std::sync::Arc;
 
     #[test]
@@ -269,7 +303,7 @@ mod tests {
             .set("host", &ConfigValue::String("localhost".into()))
             .unwrap();
 
-        let source = SqliteSource::new(&db, "myapp");
+        let source = SqliteSource::new(&db).with_app_name("myapp");
         let config = source.collect().unwrap();
         let table = config.as_table().unwrap();
 
@@ -291,7 +325,7 @@ mod tests {
             .unwrap();
         store.set("port", &ConfigValue::Integer(3000)).unwrap();
 
-        let source = SqliteSource::new(&db, "myapp");
+        let source = SqliteSource::new(&db).with_app_name("myapp");
         let table = source.collect().unwrap();
         let table = table.as_table().unwrap();
 
@@ -320,7 +354,7 @@ mod tests {
         store.set("key", &ConfigValue::Integer(42)).unwrap();
         store.delete("key").unwrap();
 
-        let source = SqliteSource::new(&db, "myapp");
+        let source = SqliteSource::new(&db).with_app_name("myapp");
         let table = source.collect().unwrap();
         assert!(table.as_table().unwrap().is_empty());
     }
@@ -337,8 +371,8 @@ mod tests {
             .set("val", &ConfigValue::Integer(2))
             .unwrap();
 
-        let a = SqliteSource::new(&db, "app_a").collect().unwrap();
-        let b = SqliteSource::new(&db, "app_b").collect().unwrap();
+        let a = SqliteSource::new(&db).with_app_name("app_a").collect().unwrap();
+        let b = SqliteSource::new(&db).with_app_name("app_b").collect().unwrap();
 
         assert_eq!(a.as_table().unwrap()["val"], ConfigValue::Integer(1));
         assert_eq!(b.as_table().unwrap()["val"], ConfigValue::Integer(2));
@@ -378,8 +412,7 @@ mod tests {
             h.join().expect("writer thread panicked");
         }
 
-        // All keys must be present and hold correct values.
-        let source = SqliteSource::new(db.as_ref(), "myapp");
+        let source = SqliteSource::new(db.as_ref()).with_app_name("myapp");
         let table = source.collect().unwrap();
         let table = table.as_table().unwrap();
 
@@ -423,7 +456,7 @@ mod tests {
         let store = SqliteStore::new(&db, "watch_test");
         store.set("port", &ConfigValue::Integer(3000)).unwrap();
 
-        let source = SqliteSource::new(&db, "watch_test");
+        let source = SqliteSource::new(&db);
         let (handle, _watcher) = source.watch::<Cfg>(WatchOptions::default()).unwrap();
 
         assert_eq!(handle.read().port, 3000);
