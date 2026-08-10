@@ -31,6 +31,7 @@ pub use confex_core::config::AsyncConfigLoader;
 pub use confex_core::source::{AsyncSource, CollectFuture};
 pub use confex_core::value::ConfigValue;
 // Re-export the derive macro under the same name as the trait (two namespaces, no conflict)
+#[cfg(feature = "macros")]
 pub use confex_macros::ConfigSchema;
 
 #[cfg(feature = "sqlite-backend")]

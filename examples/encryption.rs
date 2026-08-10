@@ -31,7 +31,7 @@ fn main() {
     let encryptor = Aes256GcmEncryptor::from(&secret_key);
 
     let config = ConfigLoader::<VaultConfig>::default()
-        .with_source(EnvSource::from("VAULT"))
+        .with_source(EnvSource::default())
         .with_encryptor(encryptor)
         .load()
         .expect("failed to load config");

@@ -14,7 +14,7 @@ struct AppConfig {
 fn main() {
     // MYAPP_HOST=localhost MYAPP_PORT=8080 cargo run --example basic
     let config = ConfigLoader::<AppConfig>::default()
-        .with_source(EnvSource::from("MYAPP"))
+        .with_source(EnvSource::default())
         .load()
         .expect("failed to load config");
 

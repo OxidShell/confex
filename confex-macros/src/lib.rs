@@ -102,8 +102,6 @@ fn impl_config_schema(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStre
     })
 }
 
-// ── attribute parsers ────────────────────────────────────────────────────────
-
 #[derive(Debug)]
 enum MergeAttr {
     Replace,
@@ -205,8 +203,6 @@ fn parse_field_attrs(field: &syn::Field) -> syn::Result<FieldAttrs> {
 
     Ok(attrs)
 }
-
-// ── type helpers ─────────────────────────────────────────────────────────────
 
 fn is_option_type(ty: &Type) -> bool {
     let Type::Path(TypePath { qself: None, path }) = ty else {

@@ -31,7 +31,7 @@ fn main() {
     // Simulate old data arriving via env: CHAT_NICK=alice CHAT_SERVER=chat.example.com
     // A real v1 file would have `nick = "alice"` instead of `display_name`.
     let config = ConfigLoader::<ChatConfig>::default()
-        .with_source(EnvSource::from("CHAT"))
+        .with_source(EnvSource::default())
         .with_migrations(MigrationChain::default().with_step(V1ToV2))
         .load()
         .expect("failed to load config");

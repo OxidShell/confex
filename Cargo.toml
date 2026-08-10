@@ -2,13 +2,28 @@
 members = ["confex-core", "confex-macros"]
 resolver = "2"
 
-[package]
-name = "confex"
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/s4rch/confex"
+rust-version = "1.88"
+
+[package]
+name = "confex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Layered config library — merges files, env vars, CLI, and SQLite into a typed struct with selective per-source hot-reload"
+keywords = ["config", "configuration", "hot-reload", "toml", "sqlite"]
+categories = ["config", "filesystem"]
+readme = "README.md"
 
 [features]
-default = ["sqlite-backend", "hot-reload", "toml"]
+default = ["macros", "sqlite-backend", "hot-reload", "toml"]
+macros = ["dep:confex-macros"]
 sqlite-backend = ["confex-core/sqlite-backend"]
 hot-reload = ["confex-core/hot-reload"]
 native-keyring = ["confex-core/native-keyring"]
@@ -18,9 +33,17 @@ json = ["confex-core/json"]
 toml = ["confex-core/toml"]
 
 [dependencies]
-confex-core = { path = "confex-core" }
-confex-macros = { path = "confex-macros" }
+confex-core = { path = "confex-core", version = "0.1" }
+confex-macros = { path = "confex-macros", version = "0.1", optional = true }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+[[example]]
+name = "async_loader"
+required-features = ["async"]
+
+[[example]]
+name = "sealed_key"
+required-features = ["sealed-key"]

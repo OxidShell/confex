@@ -1,7 +1,13 @@
 [package]
 name = "confex-core"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Core engine for confex — source merging, hot-reload, migrations, and encryption"
+keywords = ["config", "configuration", "hot-reload", "toml", "sqlite"]
+categories = ["config", "filesystem"]
 
 [features]
 sqlite-backend = ["dep:rusqlite"]
