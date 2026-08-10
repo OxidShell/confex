@@ -24,6 +24,8 @@ pub enum HotReloadError {
     Watch(String),
     Serialize(String),
     Io(std::io::Error),
+    /// Failure during the initial config load before the watcher could start.
+    Load(crate::error::LoadError),
 }
 
 impl std::fmt::Display for HotReloadError {
@@ -32,6 +34,7 @@ impl std::fmt::Display for HotReloadError {
             Self::Watch(msg) => write!(f, "failed to set up file watcher: {msg}"),
             Self::Serialize(msg) => write!(f, "failed to serialize config: {msg}"),
             Self::Io(e) => write!(f, "I/O error persisting config: {e}"),
+            Self::Load(e) => write!(f, "failed to load initial config: {e}"),
         }
     }
 }
@@ -40,6 +43,7 @@ impl std::error::Error for HotReloadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
+            Self::Load(e) => Some(e),
             _ => None,
         }
     }
@@ -48,6 +52,12 @@ impl std::error::Error for HotReloadError {
 impl From<std::io::Error> for HotReloadError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)
+    }
+}
+
+impl From<crate::error::LoadError> for HotReloadError {
+    fn from(e: crate::error::LoadError) -> Self {
+        Self::Load(e)
     }
 }
 

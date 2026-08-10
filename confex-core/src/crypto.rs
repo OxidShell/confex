@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Symmetric encrypt/decrypt over raw bytes.
-pub trait Encryptor {
+pub trait Encryptor: Send + Sync {
     /// # Errors
     /// Returns [`CryptoError::Encrypt`] on failure.
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError>;

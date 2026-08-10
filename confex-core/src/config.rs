@@ -38,11 +38,24 @@ pub trait ConfigSchema: DeserializeOwned + Serialize {
 /// Builds and executes a layered configuration load.
 ///
 /// Sources are merged in registration order (first = lowest priority).
+/// Because sources are stored as `Arc`, the loader is cheaply cloneable and
+/// its sources can be captured in hot-reload closures without duplicating state.
 pub struct ConfigLoader<S: ConfigSchema> {
-    sources: Vec<Box<dyn Source>>,
-    migrations: Option<MigrationChain>,
-    encryptor: Option<Box<dyn Encryptor>>,
+    sources: Vec<std::sync::Arc<dyn Source + Send + Sync>>,
+    migrations: Option<std::sync::Arc<MigrationChain>>,
+    encryptor: Option<std::sync::Arc<dyn Encryptor>>,
     _phantom: std::marker::PhantomData<S>,
+}
+
+impl<S: ConfigSchema> Clone for ConfigLoader<S> {
+    fn clone(&self) -> Self {
+        Self {
+            sources: self.sources.clone(),
+            migrations: self.migrations.clone(),
+            encryptor: self.encryptor.clone(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
 }
 
 impl<S: ConfigSchema> Default for ConfigLoader<S> {
@@ -58,20 +71,20 @@ impl<S: ConfigSchema> Default for ConfigLoader<S> {
 
 impl<S: ConfigSchema> ConfigLoader<S> {
     #[must_use]
-    pub fn with_source(mut self, source: impl Source + 'static) -> Self {
-        self.sources.push(Box::new(source));
+    pub fn with_source(mut self, source: impl Source + Send + Sync + 'static) -> Self {
+        self.sources.push(std::sync::Arc::new(source));
         self
     }
 
     #[must_use]
     pub fn with_migrations(mut self, migrations: MigrationChain) -> Self {
-        self.migrations = Some(migrations);
+        self.migrations = Some(std::sync::Arc::new(migrations));
         self
     }
 
     #[must_use]
     pub fn with_encryptor(mut self, encryptor: impl Encryptor + 'static) -> Self {
-        self.encryptor = Some(Box::new(encryptor));
+        self.encryptor = Some(std::sync::Arc::new(encryptor));
         self
     }
 
@@ -79,11 +92,11 @@ impl<S: ConfigSchema> ConfigLoader<S> {
     ///
     /// # Errors
     /// Returns [`LoadError`] on source, migration, crypto, or deserialization failure.
-    pub fn load(self) -> Result<S, LoadError> {
+    pub fn load(&self) -> Result<S, LoadError> {
         let strategies = S::field_strategies();
 
         let mut merged = ConfigValue::Table(BTreeMap::new());
-        for source in self.sources {
+        for source in &self.sources {
             let collected = source.collect()?;
             merged = merge(merged, collected, strategies);
         }
@@ -97,7 +110,7 @@ impl<S: ConfigSchema> ConfigLoader<S> {
         };
 
         if current_version < S::SCHEMA_VERSION
-            && let Some(chain) = self.migrations
+            && let Some(chain) = &self.migrations
         {
             merged = chain.run(merged, current_version, S::SCHEMA_VERSION)?;
         }
@@ -110,6 +123,47 @@ impl<S: ConfigSchema> ConfigLoader<S> {
     }
 }
 
+// ── hot-reload ────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "hot-reload")]
+impl<S: ConfigSchema + Clone + Send + Sync + 'static> ConfigLoader<S> {
+    /// Watch `watch_path` for changes and reload the full source stack automatically.
+    ///
+    /// On every detected change (after the debounce window) all sources are
+    /// re-collected, merged, migrated, decrypted, and deserialized — exactly
+    /// the same pipeline as [`load`](ConfigLoader::load). The resulting
+    /// [`crate::handle::ConfigHandle`] is updated atomically so all readers
+    /// see the new value lock-free.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::handle::HotReloadError`] if the initial load fails or
+    /// the file watcher cannot be initialised.
+    pub fn watch(
+        self,
+        watch_path: &std::path::Path,
+        options: crate::handle::WatchOptions,
+    ) -> Result<
+        (crate::handle::ConfigHandle<S>, crate::handle::WatcherHandle),
+        crate::handle::HotReloadError,
+    > {
+        use std::sync::Arc;
+
+        let initial = self.load()?;
+        let loader = Arc::new(self);
+        let reload: Arc<dyn Fn() -> Result<S, LoadError> + Send + Sync> =
+            Arc::new(move || loader.load());
+
+        crate::handle::ConfigHandle::spawn_watcher(
+            initial,
+            watch_path,
+            &reload,
+            None,
+            options.debounce,
+        )
+    }
+}
+
 // ── async loader ──────────────────────────────────────────────────────────────
 
 /// Async variant of [`ConfigLoader`]. Sources are driven with `.await`; the
@@ -119,9 +173,9 @@ impl<S: ConfigSchema> ConfigLoader<S> {
 /// so they can be mixed with async sources in the same loader.
 #[cfg(feature = "async")]
 pub struct AsyncConfigLoader<S: ConfigSchema> {
-    sources: Vec<Box<dyn AsyncSource + Send + Sync>>,
-    migrations: Option<MigrationChain>,
-    encryptor: Option<Box<dyn Encryptor>>,
+    sources: Vec<std::sync::Arc<dyn AsyncSource + Send + Sync>>,
+    migrations: Option<std::sync::Arc<MigrationChain>>,
+    encryptor: Option<std::sync::Arc<dyn Encryptor>>,
     _phantom: std::marker::PhantomData<S>,
 }
 
@@ -141,19 +195,19 @@ impl<S: ConfigSchema> Default for AsyncConfigLoader<S> {
 impl<S: ConfigSchema> AsyncConfigLoader<S> {
     #[must_use]
     pub fn with_source(mut self, source: impl AsyncSource + 'static) -> Self {
-        self.sources.push(Box::new(source));
+        self.sources.push(std::sync::Arc::new(source));
         self
     }
 
     #[must_use]
     pub fn with_migrations(mut self, migrations: MigrationChain) -> Self {
-        self.migrations = Some(migrations);
+        self.migrations = Some(std::sync::Arc::new(migrations));
         self
     }
 
     #[must_use]
     pub fn with_encryptor(mut self, encryptor: impl Encryptor + 'static) -> Self {
-        self.encryptor = Some(Box::new(encryptor));
+        self.encryptor = Some(std::sync::Arc::new(encryptor));
         self
     }
 
@@ -161,11 +215,11 @@ impl<S: ConfigSchema> AsyncConfigLoader<S> {
     ///
     /// # Errors
     /// Returns [`LoadError`] on source, migration, crypto, or deserialization failure.
-    pub async fn load(self) -> Result<S, LoadError> {
+    pub async fn load(&self) -> Result<S, LoadError> {
         let strategies = S::field_strategies();
 
         let mut merged = ConfigValue::Table(std::collections::BTreeMap::new());
-        for source in self.sources {
+        for source in &self.sources {
             let collected = source.collect().await?;
             merged = merge(merged, collected, strategies);
         }
@@ -179,7 +233,7 @@ impl<S: ConfigSchema> AsyncConfigLoader<S> {
         };
 
         if current_version < S::SCHEMA_VERSION
-            && let Some(chain) = self.migrations
+            && let Some(chain) = &self.migrations
         {
             merged = chain.run(merged, current_version, S::SCHEMA_VERSION)?;
         }

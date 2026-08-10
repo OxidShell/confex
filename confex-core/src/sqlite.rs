@@ -74,16 +74,19 @@ impl SqliteSource {
 impl SqliteSource {
     /// Watch this database for changes and reload automatically.
     ///
-    /// Unlike file-based hot-reload, writes to the config should go through
-    /// [`SqliteStore`] rather than [`crate::handle::WriteGuard`], which has no
-    /// write-back path in this mode.
+    /// Loads the initial config from the database, then watches the containing
+    /// directory so WAL writes from other processes trigger a reload without
+    /// waiting for a checkpoint.
+    ///
+    /// Writes should go through [`SqliteStore`]; [`crate::handle::WriteGuard`]
+    /// has no write-back path in this mode.
     ///
     /// # Errors
     ///
-    /// Returns [`crate::handle::HotReloadError::Watch`] if the watcher cannot be initialised.
+    /// Returns [`crate::handle::HotReloadError::Load`] if the initial load fails,
+    /// or [`crate::handle::HotReloadError::Watch`] if the watcher cannot start.
     pub fn watch<T>(
         &self,
-        initial: T,
         options: crate::handle::WatchOptions,
     ) -> Result<
         (crate::handle::ConfigHandle<T>, crate::handle::WatcherHandle),
@@ -99,15 +102,18 @@ impl SqliteSource {
     {
         use std::sync::Arc;
 
+        let load = |src: &Self| -> Result<T, crate::error::LoadError> {
+            let cv = src.collect()?;
+            serde::Deserialize::deserialize(crate::deserialize::ConfigValueDeserializer(cv))
+                .map_err(Into::into)
+        };
+
+        let initial = load(self)?;
+
         let source = self.clone();
         let reload: Arc<dyn Fn() -> Result<T, crate::error::LoadError> + Send + Sync> =
-            Arc::new(move || {
-                let cv = source.collect()?;
-                serde::Deserialize::deserialize(crate::deserialize::ConfigValueDeserializer(cv))
-                    .map_err(Into::into)
-            });
+            Arc::new(move || load(&source));
 
-        // Watch the parent directory so WAL-file writes are detected immediately.
         let watch_path = self.db_path.parent().unwrap_or(&self.db_path);
         crate::handle::ConfigHandle::spawn_watcher(
             initial,
@@ -416,9 +422,7 @@ mod tests {
         store.set("port", &ConfigValue::Integer(3000)).unwrap();
 
         let source = SqliteSource::new(&db, "watch_test");
-        let (handle, _watcher) = source
-            .watch(Cfg { port: 3000 }, WatchOptions::default())
-            .unwrap();
+        let (handle, _watcher) = source.watch::<Cfg>(WatchOptions::default()).unwrap();
 
         assert_eq!(handle.read().port, 3000);
 

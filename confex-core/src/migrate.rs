@@ -1,7 +1,7 @@
 use crate::{error::MigrationError, value::ConfigValue};
 
 /// A single schema migration step.
-pub trait Migration {
+pub trait Migration: Send + Sync {
     // Naming mirrors the `from`/`to` language used throughout the plan docs.
     #[allow(clippy::wrong_self_convention)]
     fn from_version(&self) -> u32;

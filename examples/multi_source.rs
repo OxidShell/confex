@@ -34,7 +34,7 @@ fn main() {
 
     let config = ConfigLoader::<Config>::default()
         // lowest priority
-        .with_source(FileSource::new(vec!["app.toml".into()], TomlFormat))
+        .with_source(FileSource::new(["app.toml".into()], TomlFormat))
         // mid priority
         .with_source(EnvSource::from("APP"))
         // highest priority

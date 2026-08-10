@@ -23,11 +23,11 @@ struct TlsConfig {
 }
 
 fn main() {
-    let config_path = std::env::var_os("CONFIG_PATH")
-        .map_or_else(|| PathBuf::from("server.toml"), PathBuf::from);
+    let config_path =
+        std::env::var_os("CONFIG_PATH").map_or_else(|| PathBuf::from("server.toml"), PathBuf::from);
 
     let config = ConfigLoader::<ServerConfig>::default()
-        .with_source(FileSource::new(vec![config_path], TomlFormat))
+        .with_source(FileSource::new([config_path], TomlFormat))
         .with_source(EnvSource::from("SERVER"))
         .load()
         .expect("failed to load config");
