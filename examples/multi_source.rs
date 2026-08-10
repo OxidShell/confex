@@ -1,7 +1,11 @@
-/// Merge from multiple sources in priority order:
-/// defaults < file < env vars < CLI args.
+/// Layered config: defaults < file < env vars < CLI args.
+///
+/// Without `hot-reload`: one-shot load.
+/// With `hot-reload`: only the TOML file triggers selective reload; env vars
+/// and CLI args are passive (fixed at startup, never re-sampled).
 ///
 /// Run: `cargo run --example multi_source -- --port 9090`
+/// Run: `cargo run --example multi_source --features hot-reload -- --port 9090`
 use confex::{CliSource, ConfigLoader, ConfigSchema, ConfigValue, EnvSource, FileSource, TomlFormat};
 use serde::{Deserialize, Serialize};
 
@@ -13,9 +17,8 @@ struct Config {
     debug: bool,
 }
 
-fn main() {
-    // Parse --key value pairs from argv.
-    let cli_pairs = std::env::args()
+fn cli_source() -> CliSource {
+    std::env::args()
         .skip(1)
         .collect::<Vec<_>>()
         .chunks(2)
@@ -30,17 +33,41 @@ fn main() {
                 None
             }
         })
-        .collect::<Vec<_>>();
+        .collect()
+}
 
-    let config = ConfigLoader::<Config>::default()
-        // lowest priority
-        .with_source(FileSource::new(["app.toml".into()], TomlFormat))
-        // mid priority
-        .with_source(EnvSource::from("APP"))
-        // highest priority
-        .with_source(cli_pairs.into_iter().collect::<CliSource>())
-        .load()
-        .expect("failed to load config");
+fn main() {
+    // ── one-shot load ─────────────────────────────────────────────────────────
+    #[cfg(not(feature = "hot-reload"))]
+    {
+        let config = ConfigLoader::<Config>::default()
+            .with_source(FileSource::new(["app.toml".into()], TomlFormat)) // lowest priority
+            .with_source(EnvSource::from("APP"))
+            .with_source(cli_source()) // highest priority
+            .load()
+            .expect("failed to load config");
 
-    println!("host={} port={} debug={}", config.host, config.port, config.debug);
+        println!("host={} port={} debug={}", config.host, config.port, config.debug);
+    }
+
+    // ── selective hot-reload ──────────────────────────────────────────────────
+    // The file is watchable: `app.toml` changes trigger a selective re-read of
+    // only that source. Env vars and CLI args remain fixed after startup — they
+    // override whatever the file says, but are never re-sampled on reload.
+    #[cfg(feature = "hot-reload")]
+    {
+        use confex::WatchOptions;
+
+        let (handle, _watcher) = ConfigLoader::<Config>::default()
+            .with_watched_source(FileSource::new(["app.toml".into()], TomlFormat))
+            .with_source(EnvSource::from("APP"))
+            .with_source(cli_source())
+            .watch_auto(WatchOptions::default())
+            .expect("failed to start watcher");
+
+        println!("initial: host={} port={} debug={}", handle.read().host, handle.read().port, handle.read().debug);
+        println!("watching app.toml — edit it to trigger a selective reload");
+
+        std::thread::park();
+    }
 }

@@ -1,8 +1,10 @@
 /// Persist and read config from the `SQLite` dconf-like backend.
 ///
 /// Without `hot-reload`: one-shot load via `ConfigLoader`.
-/// With `hot-reload`: live handle via `SqliteSource::watch` or
-/// `ConfigLoader::watch` (the latter re-applies all sources on every change).
+/// With `hot-reload`: two options:
+/// - `SqliteSource::watch` — pure `SQLite` watcher, no other sources.
+/// - `ConfigLoader::watch_auto` — selective reload; env var overrides are
+///   passive (sampled once at startup, never re-read on `SQLite` change).
 ///
 /// Run: `cargo run --example sqlite_store --features sqlite-backend`
 /// Run: `cargo run --example sqlite_store --features sqlite-backend,hot-reload`

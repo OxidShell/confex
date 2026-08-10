@@ -1,9 +1,15 @@
-/// Load config from a TOML file, fall back to env vars.
+/// Load config from a TOML file, with env var overrides and optional hot-reload.
+///
+/// Without `hot-reload`: one-shot load via `ConfigLoader::load`.
+/// With `hot-reload`: live handle via `ConfigLoader::watch_auto` — only the
+/// TOML file is re-read on change; env var overrides are passive (sampled once
+/// at startup).
 ///
 /// Run: `cargo run --example file_toml`
+/// Run: `cargo run --example file_toml --features hot-reload`
 use std::path::PathBuf;
 
-use confex::{ConfigHandle, ConfigLoader, ConfigSchema, EnvSource, FileSource, TomlFormat};
+use confex::{ConfigLoader, ConfigSchema, EnvSource, FileSource, TomlFormat};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ConfigSchema)]
@@ -22,18 +28,50 @@ struct TlsConfig {
     key: PathBuf,
 }
 
+fn config_path() -> PathBuf {
+    std::env::var_os("CONFIG_PATH")
+        .map_or_else(|| PathBuf::from("server.toml"), PathBuf::from)
+}
+
 fn main() {
-    let config_path =
-        std::env::var_os("CONFIG_PATH").map_or_else(|| PathBuf::from("server.toml"), PathBuf::from);
+    let path = config_path();
 
-    let config = ConfigLoader::<ServerConfig>::default()
-        .with_source(FileSource::new([config_path], TomlFormat))
-        .with_source(EnvSource::from("SERVER"))
-        .load()
-        .expect("failed to load config");
+    // ── one-shot load ─────────────────────────────────────────────────────────
+    #[cfg(not(feature = "hot-reload"))]
+    {
+        let config = ConfigLoader::<ServerConfig>::default()
+            .with_source(FileSource::new([path], TomlFormat))
+            .with_source(EnvSource::from("SERVER"))
+            .load()
+            .expect("failed to load config");
 
-    let handle = ConfigHandle::from(config);
-    let cfg = handle.read();
+        print_config(&config);
+    }
+
+    // ── selective hot-reload ──────────────────────────────────────────────────
+    // `with_watched_source` registers the file for selective reload.
+    // `with_source` keeps env vars passive (sampled once, never re-read).
+    // On each file change only the file source is re-collected; the cached
+    // env snapshot is merged on top without touching the environment again.
+    #[cfg(feature = "hot-reload")]
+    {
+        use confex::WatchOptions;
+
+        let (handle, _watcher) = ConfigLoader::<ServerConfig>::default()
+            .with_watched_source(FileSource::new([path.clone()], TomlFormat))
+            .with_source(EnvSource::from("SERVER"))
+            .watch_auto(WatchOptions::default())
+            .expect("failed to start watcher");
+
+        println!("watching {} — edit it to see a reload", path.display());
+        print_config(&handle.read());
+
+        // Keep running so the watcher stays alive.
+        std::thread::park();
+    }
+}
+
+fn print_config(cfg: &ServerConfig) {
     println!("host={} port={}", cfg.host, cfg.port);
     println!("origins={:?}", cfg.allowed_origins);
     if let Some(tls) = &cfg.tls {
