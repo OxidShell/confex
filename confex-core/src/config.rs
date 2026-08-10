@@ -35,13 +35,28 @@ pub trait ConfigSchema: DeserializeOwned + Serialize {
     }
 }
 
+// ── loader entry ──────────────────────────────────────────────────────────────
+
+/// One source in the loader's pipeline.
+///
+/// `watch_paths` is populated only for entries added via
+/// [`ConfigLoader::with_watched_source`]; passive sources (env, CLI) leave it
+/// empty.
+pub(crate) struct LoaderEntry {
+    pub(crate) source: std::sync::Arc<dyn Source + Send + Sync>,
+    #[cfg(feature = "hot-reload")]
+    pub(crate) watch_paths: Vec<std::path::PathBuf>,
+}
+
+// ── ConfigLoader ──────────────────────────────────────────────────────────────
+
 /// Builds and executes a layered configuration load.
 ///
 /// Sources are merged in registration order (first = lowest priority).
 /// Because sources are stored as `Arc`, the loader is cheaply cloneable and
 /// its sources can be captured in hot-reload closures without duplicating state.
 pub struct ConfigLoader<S: ConfigSchema> {
-    sources: Vec<std::sync::Arc<dyn Source + Send + Sync>>,
+    entries: Vec<LoaderEntry>,
     migrations: Option<std::sync::Arc<MigrationChain>>,
     encryptor: Option<std::sync::Arc<dyn Encryptor>>,
     _phantom: std::marker::PhantomData<S>,
@@ -50,7 +65,15 @@ pub struct ConfigLoader<S: ConfigSchema> {
 impl<S: ConfigSchema> Clone for ConfigLoader<S> {
     fn clone(&self) -> Self {
         Self {
-            sources: self.sources.clone(),
+            entries: self
+                .entries
+                .iter()
+                .map(|e| LoaderEntry {
+                    source: std::sync::Arc::clone(&e.source),
+                    #[cfg(feature = "hot-reload")]
+                    watch_paths: e.watch_paths.clone(),
+                })
+                .collect(),
             migrations: self.migrations.clone(),
             encryptor: self.encryptor.clone(),
             _phantom: std::marker::PhantomData,
@@ -61,7 +84,7 @@ impl<S: ConfigSchema> Clone for ConfigLoader<S> {
 impl<S: ConfigSchema> Default for ConfigLoader<S> {
     fn default() -> Self {
         Self {
-            sources: Vec::new(),
+            entries: Vec::new(),
             migrations: None,
             encryptor: None,
             _phantom: std::marker::PhantomData,
@@ -70,9 +93,40 @@ impl<S: ConfigSchema> Default for ConfigLoader<S> {
 }
 
 impl<S: ConfigSchema> ConfigLoader<S> {
+    /// Add a passive source (env vars, CLI args, etc.).
+    ///
+    /// Passive sources are collected once at load time. In selective hot-reload
+    /// mode ([`watch_auto`](ConfigLoader::watch_auto)) their initial cache is
+    /// reused for every re-merge; they never trigger a reload themselves. Use
+    /// [`with_watched_source`](ConfigLoader::with_watched_source) for
+    /// file-backed or `SQLite` sources that should trigger selective reloads.
     #[must_use]
     pub fn with_source(mut self, source: impl Source + Send + Sync + 'static) -> Self {
-        self.sources.push(std::sync::Arc::new(source));
+        self.entries.push(LoaderEntry {
+            source: std::sync::Arc::new(source),
+            #[cfg(feature = "hot-reload")]
+            watch_paths: Vec::new(),
+        });
+        self
+    }
+
+    /// Add a watchable source whose filesystem changes trigger selective reloads.
+    ///
+    /// Only meaningful when combined with
+    /// [`watch_auto`](ConfigLoader::watch_auto). Using this with
+    /// [`watch`](ConfigLoader::watch) or [`load`](ConfigLoader::load) works but
+    /// provides no benefit over [`with_source`](ConfigLoader::with_source).
+    #[cfg(feature = "hot-reload")]
+    #[must_use]
+    pub fn with_watched_source(
+        mut self,
+        source: impl crate::source::WatchableSource + 'static,
+    ) -> Self {
+        let watch_paths = source.watch_paths();
+        self.entries.push(LoaderEntry {
+            source: std::sync::Arc::new(source),
+            watch_paths,
+        });
         self
     }
 
@@ -96,8 +150,8 @@ impl<S: ConfigSchema> ConfigLoader<S> {
         let strategies = S::field_strategies();
 
         let mut merged = ConfigValue::Table(BTreeMap::new());
-        for source in &self.sources {
-            let collected = source.collect()?;
+        for entry in &self.entries {
+            let collected = entry.source.collect()?;
             merged = merge(merged, collected, strategies);
         }
 
@@ -127,13 +181,12 @@ impl<S: ConfigSchema> ConfigLoader<S> {
 
 #[cfg(feature = "hot-reload")]
 impl<S: ConfigSchema + Clone + Send + Sync + 'static> ConfigLoader<S> {
-    /// Watch `watch_path` for changes and reload the full source stack automatically.
+    /// Full-pipeline hot-reload: every change to `watch_path` re-collects all
+    /// sources, merges, migrates, decrypts, and deserializes.
     ///
-    /// On every detected change (after the debounce window) all sources are
-    /// re-collected, merged, migrated, decrypted, and deserialized — exactly
-    /// the same pipeline as [`load`](ConfigLoader::load). The resulting
-    /// [`crate::handle::ConfigHandle`] is updated atomically so all readers
-    /// see the new value lock-free.
+    /// Prefer [`watch_auto`](ConfigLoader::watch_auto) when using
+    /// [`with_watched_source`](ConfigLoader::with_watched_source), as it
+    /// avoids re-collecting passive sources on every event.
     ///
     /// # Errors
     ///
@@ -159,6 +212,86 @@ impl<S: ConfigSchema + Clone + Send + Sync + 'static> ConfigLoader<S> {
             watch_path,
             &reload,
             None,
+            options.debounce,
+        )
+    }
+
+    /// Selective hot-reload: only re-collects the source whose watch path changed.
+    ///
+    /// Sources added via [`with_watched_source`](ConfigLoader::with_watched_source)
+    /// register their filesystem paths. When a change is detected on one of those
+    /// paths, only that source is re-collected; all other sources reuse their cached
+    /// values from the last collection. The results are merged in registration order.
+    ///
+    /// Sources added via [`with_source`](ConfigLoader::with_source) (env vars, CLI
+    /// args) are passive — they keep their initial cached value forever and never
+    /// trigger a reload.
+    ///
+    /// Self-write suppression: if the merged result after re-collection equals the
+    /// previous merged result, the in-memory swap is skipped. This avoids
+    /// redundant deserialization when the current process itself triggered the
+    /// filesystem event.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::handle::HotReloadError`] if the initial load fails or
+    /// the file watcher cannot be initialised.
+    pub fn watch_auto(
+        self,
+        options: crate::handle::WatchOptions,
+    ) -> Result<
+        (crate::handle::ConfigHandle<S>, crate::handle::WatcherHandle),
+        crate::handle::HotReloadError,
+    > {
+        use std::sync::Arc;
+
+        use crate::handle::SelectiveEntry;
+
+        let strategies = S::field_strategies();
+        let migrations = self.migrations.clone();
+        let encryptor = self.encryptor.clone();
+
+        let mut selective_entries = Vec::with_capacity(self.entries.len());
+        let mut initial_merged = ConfigValue::Table(BTreeMap::new());
+
+        for entry in &self.entries {
+            let cache = entry.source.collect().map_err(LoadError::from)?;
+            initial_merged = merge(initial_merged, cache.clone(), strategies);
+            selective_entries.push(SelectiveEntry {
+                source: Arc::clone(&entry.source),
+                cache: std::sync::Mutex::new(cache),
+                watch_paths: entry.watch_paths.clone(),
+            });
+        }
+
+        let transform: Arc<dyn Fn(ConfigValue) -> Result<S, LoadError> + Send + Sync> =
+            Arc::new(move |mut merged: ConfigValue| {
+                let current_version = match &merged {
+                    ConfigValue::Table(t) => match t.get("__schema_version") {
+                        Some(ConfigValue::Integer(v)) => u32::try_from(*v).unwrap_or(0),
+                        _ => 0,
+                    },
+                    _ => 0,
+                };
+                if current_version < S::SCHEMA_VERSION
+                    && let Some(chain) = &migrations
+                {
+                    merged = chain.run(merged, current_version, S::SCHEMA_VERSION)?;
+                }
+                if let Some(enc) = &encryptor {
+                    decrypt_fields(&mut merged, S::encrypted_fields(), enc.as_ref())?;
+                }
+                Ok(S::deserialize(ConfigValueDeserializer(merged))?)
+            });
+
+        let initial = transform(initial_merged.clone())?;
+
+        crate::handle::ConfigHandle::spawn_selective_watcher(
+            initial,
+            initial_merged,
+            selective_entries,
+            strategies,
+            transform,
             options.debounce,
         )
     }

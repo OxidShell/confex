@@ -125,6 +125,17 @@ impl SqliteSource {
     }
 }
 
+#[cfg(feature = "hot-reload")]
+impl crate::source::WatchableSource for SqliteSource {
+    fn watch_paths(&self) -> Vec<std::path::PathBuf> {
+        vec![self
+            .db_path
+            .parent()
+            .unwrap_or(&self.db_path)
+            .to_path_buf()]
+    }
+}
+
 impl Source for SqliteSource {
     fn collect(&self) -> Result<ConfigValue, SourceError> {
         if !self.db_path.exists() {

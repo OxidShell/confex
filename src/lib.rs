@@ -22,6 +22,8 @@ pub use confex_core::merge::{FieldStrategies, MergeStrategy};
 pub use confex_core::migrate::{Migration, MigrationChain, rename_key};
 pub use confex_core::paths::{app_config_dir, app_data_dir, config_base_dir, data_base_dir};
 pub use confex_core::source::{CliSource, EnvSource, FileSource, Source};
+#[cfg(feature = "hot-reload")]
+pub use confex_core::source::WatchableSource;
 
 #[cfg(feature = "async")]
 pub use confex_core::config::AsyncConfigLoader;

@@ -44,26 +44,24 @@ fn main() {
     println!("one-shot — theme={} font_size={}", config.theme, config.font_size);
 
     // ── Live handle (hot-reload feature) ─────────────────────────────────────
-    // Option A: pure SQLite watcher — loads initial from DB, updates on any write.
-    // Option B: full-pipeline watcher — re-applies all sources (SQLite + env) on change.
     #[cfg(feature = "hot-reload")]
     {
         use confex::WatchOptions;
 
-        // Option A: SqliteSource::watch — simplest, pure SQLite
+        // Option A: SqliteSource::watch — simplest, pure SQLite watcher
         let source = SqliteSource::new(&db_path, "prefs");
         let (handle_a, _watcher_a) = source
             .watch::<Prefs>(WatchOptions::default())
             .expect("failed to start sqlite watcher");
         println!("live (sqlite) — theme={}", handle_a.read().theme);
 
-        // Option B: ConfigLoader::watch — full pipeline re-runs on every SQLite change
+        // Option B: selective reload — env vars are passive, only SQLite triggers reload
         let (handle_b, _watcher_b) = ConfigLoader::<Prefs>::default()
-            .with_source(SqliteSource::new(&db_path, "prefs"))
             .with_source(EnvSource::from("PREFS"))
-            .watch(&db_path, WatchOptions::default())
-            .expect("failed to start full-pipeline watcher");
-        println!("live (full) — theme={}", handle_b.read().theme);
+            .with_watched_source(SqliteSource::new(&db_path, "prefs"))
+            .watch_auto(WatchOptions::default())
+            .expect("failed to start selective watcher");
+        println!("live (selective) — theme={}", handle_b.read().theme);
     }
 }
 

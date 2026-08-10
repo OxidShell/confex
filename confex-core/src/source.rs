@@ -134,6 +134,28 @@ impl<F: Format> Source for FileSource<F> {
     }
 }
 
+// ── watchable source ─────────────────────────────────────────────────────────
+
+/// A [`Source`] that can declare which filesystem paths it monitors.
+///
+/// Implemented by [`FileSource`] and [`SqliteSource`]. Passive sources (env
+/// vars, CLI args) do not implement this — their values are fixed at load time
+/// and never need a reload trigger.
+#[cfg(feature = "hot-reload")]
+pub trait WatchableSource: Source + Send + Sync {
+    /// Filesystem paths (files or directories) whose changes should trigger a
+    /// reload of this source. An empty vec means "not currently watchable"
+    /// (e.g. no candidate file exists yet).
+    fn watch_paths(&self) -> Vec<std::path::PathBuf>;
+}
+
+#[cfg(feature = "hot-reload")]
+impl<F: Format + Send + Sync> WatchableSource for FileSource<F> {
+    fn watch_paths(&self) -> Vec<std::path::PathBuf> {
+        self.candidates.clone()
+    }
+}
+
 // ── async source ──────────────────────────────────────────────────────────────
 
 /// Owned, boxed future returned by [`AsyncSource::collect`].
