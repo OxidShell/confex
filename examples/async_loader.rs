@@ -33,13 +33,15 @@ mod inner {
         endpoint: String,
     }
 
-    impl RemoteSource {
-        pub fn new(endpoint: impl Into<String>) -> Self {
+    impl From<&str> for RemoteSource {
+        fn from(endpoint: &str) -> Self {
             Self {
-                endpoint: endpoint.into(),
+                endpoint: endpoint.to_owned(),
             }
         }
+    }
 
+    impl RemoteSource {
         async fn fetch(&self) -> Result<ConfigValue, SourceError> {
             // In production: reqwest::get(&self.endpoint).await?
             eprintln!("fetching remote config from {}", self.endpoint);
@@ -69,8 +71,8 @@ mod inner {
         // EnvSource is sync — the blanket impl wraps it transparently.
         // GAME_DEBUG=true overrides the remote value.
         let config = AsyncConfigLoader::<GameConfig>::default()
-            .with_source(RemoteSource::new("https://config.example.com/game"))
-            .with_source(EnvSource::new("GAME"))
+            .with_source(RemoteSource::from("https://config.example.com/game"))
+            .with_source(EnvSource::from("GAME"))
             .load()
             .await
             .expect("failed to load config");

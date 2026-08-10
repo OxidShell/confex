@@ -28,11 +28,11 @@ fn main() {
 
     let config = ConfigLoader::<ServerConfig>::default()
         .with_source(FileSource::new(vec![config_path], TomlFormat))
-        .with_source(EnvSource::new("SERVER"))
+        .with_source(EnvSource::from("SERVER"))
         .load()
         .expect("failed to load config");
 
-    let handle = ConfigHandle::new(config);
+    let handle = ConfigHandle::from(config);
     let cfg = handle.read();
     println!("host={} port={}", cfg.host, cfg.port);
     println!("origins={:?}", cfg.allowed_origins);

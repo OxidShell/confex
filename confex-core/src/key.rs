@@ -38,9 +38,8 @@ pub struct FileKeyProvider {
     path: PathBuf,
 }
 
-impl FileKeyProvider {
-    #[must_use]
-    pub fn new(path: PathBuf) -> Self {
+impl From<PathBuf> for FileKeyProvider {
+    fn from(path: PathBuf) -> Self {
         Self { path }
     }
 }
@@ -166,9 +165,8 @@ pub struct WindowsDpapi {
 }
 
 #[cfg(all(windows, feature = "native-keyring"))]
-impl WindowsDpapi {
-    #[must_use]
-    pub fn new(blob_path: PathBuf) -> Self {
+impl From<PathBuf> for WindowsDpapi {
+    fn from(blob_path: PathBuf) -> Self {
         Self { blob_path }
     }
 }
@@ -333,15 +331,23 @@ pub struct PassphraseUnsealer {
 }
 
 #[cfg(feature = "sealed-key")]
-impl PassphraseUnsealer {
-    /// Creates a new unsealer from the given passphrase.
-    #[must_use]
-    pub fn new(passphrase: impl Into<String>) -> Self {
+impl From<String> for PassphraseUnsealer {
+    fn from(passphrase: String) -> Self {
+        Self { passphrase }
+    }
+}
+
+#[cfg(feature = "sealed-key")]
+impl From<&str> for PassphraseUnsealer {
+    fn from(passphrase: &str) -> Self {
         Self {
-            passphrase: passphrase.into(),
+            passphrase: passphrase.to_owned(),
         }
     }
+}
 
+#[cfg(feature = "sealed-key")]
+impl PassphraseUnsealer {
     /// Creates a new unsealer by reading the passphrase from an environment variable.
     ///
     /// # Errors
@@ -375,7 +381,7 @@ impl Unsealer for PassphraseUnsealer {
         rand::thread_rng().fill_bytes(&mut salt);
 
         let kek = self.derive_kek(&salt)?;
-        let encryptor = Aes256GcmEncryptor::new(&SecretKey(kek));
+        let encryptor = Aes256GcmEncryptor::from(&SecretKey(kek));
         let encrypted = encryptor
             .encrypt(key)
             .map_err(|_| KeyError::InvalidBlob)?;
@@ -396,7 +402,7 @@ impl Unsealer for PassphraseUnsealer {
         }
         let (salt, ciphertext) = blob.split_at(32);
         let kek = self.derive_kek(salt)?;
-        let encryptor = Aes256GcmEncryptor::new(&SecretKey(kek));
+        let encryptor = Aes256GcmEncryptor::from(&SecretKey(kek));
         let plain = encryptor.decrypt(ciphertext).map_err(|_| KeyError::InvalidBlob)?;
 
         let len = plain.len();
@@ -528,7 +534,7 @@ mod tests {
     fn file_key_provider_generates_and_persists() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("key");
-        let provider = FileKeyProvider::new(path.clone());
+        let provider = FileKeyProvider::from(path.clone());
         let k1 = provider.key("app").unwrap();
         let k2 = provider.key("app").unwrap();
         assert_eq!(k1.as_bytes(), k2.as_bytes());
@@ -548,7 +554,7 @@ mod tests {
     #[cfg(feature = "sealed-key")]
     #[test]
     fn passphrase_unsealer_round_trip() {
-        let unsealer = PassphraseUnsealer::new("hunter2");
+        let unsealer = PassphraseUnsealer::from("hunter2");
         let key = [0x42u8; 32];
         let blob = unsealer.seal(&key).unwrap();
         let recovered = unsealer.unseal(&blob).unwrap();
@@ -560,7 +566,7 @@ mod tests {
     fn sealed_provider_creates_and_loads() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("key.sealed");
-        let provider = SealedFileKeyProvider::new(path, PassphraseUnsealer::new("secret"));
+        let provider = SealedFileKeyProvider::new(path, PassphraseUnsealer::from("secret"));
         let k1 = provider.key("app").unwrap();
         let k2 = provider.key("app").unwrap();
         assert_eq!(k1.as_bytes(), k2.as_bytes());
@@ -571,9 +577,9 @@ mod tests {
     fn sealed_provider_wrong_passphrase_errors() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("key.sealed");
-        let p1 = SealedFileKeyProvider::new(path.clone(), PassphraseUnsealer::new("correct"));
+        let p1 = SealedFileKeyProvider::new(path.clone(), PassphraseUnsealer::from("correct"));
         p1.key("app").unwrap();
-        let p2 = SealedFileKeyProvider::new(path, PassphraseUnsealer::new("wrong"));
+        let p2 = SealedFileKeyProvider::new(path, PassphraseUnsealer::from("wrong"));
         assert!(matches!(p2.key("app"), Err(KeyError::InvalidBlob)));
     }
 }

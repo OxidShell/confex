@@ -109,16 +109,16 @@ impl<T> Clone for ConfigHandle<T> {
     }
 }
 
-impl<T: ConfigSchema> ConfigHandle<T> {
-    /// Manual mode: no file watcher, no autosave. The handle is the sole source of truth.
-    #[must_use]
-    pub fn new(config: T) -> Self {
+impl<T: ConfigSchema> From<T> for ConfigHandle<T> {
+    fn from(config: T) -> Self {
         Self {
             swap: Arc::new(ArcSwap::from_pointee(config)),
             write_back: None,
         }
     }
+}
 
+impl<T: ConfigSchema> ConfigHandle<T> {
     /// Lock-free snapshot of the current config. Equivalent to `Arc::clone` cost.
     #[must_use]
     pub fn read(&self) -> arc_swap::Guard<Arc<T>> {
@@ -313,13 +313,13 @@ mod tests {
 
     #[test]
     fn read_returns_initial_value() {
-        let h = ConfigHandle::new(Cfg { value: 42 });
+        let h = ConfigHandle::from(Cfg { value: 42 });
         assert_eq!(h.read().value, 42);
     }
 
     #[test]
     fn write_guard_updates_in_memory_on_drop() {
-        let h = ConfigHandle::new(Cfg { value: 1 });
+        let h = ConfigHandle::from(Cfg { value: 1 });
         {
             let mut g = h.write();
             (*g).value = 99;
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn cloned_handle_sees_write() {
-        let h = ConfigHandle::new(Cfg { value: 0 });
+        let h = ConfigHandle::from(Cfg { value: 0 });
         let h2 = h.clone();
         {
             let mut g = h.write();

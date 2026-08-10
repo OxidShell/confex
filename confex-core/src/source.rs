@@ -23,11 +23,16 @@ pub struct EnvSource {
     prefix: String,
 }
 
-impl EnvSource {
-    #[must_use]
-    pub fn new(prefix: impl Into<String>) -> Self {
+impl From<String> for EnvSource {
+    fn from(prefix: String) -> Self {
+        Self { prefix }
+    }
+}
+
+impl From<&str> for EnvSource {
+    fn from(prefix: &str) -> Self {
         Self {
-            prefix: prefix.into(),
+            prefix: prefix.to_owned(),
         }
     }
 }
@@ -77,11 +82,10 @@ pub struct CliSource {
     values: BTreeMap<String, ConfigValue>,
 }
 
-impl CliSource {
-    #[must_use]
-    pub fn from_pairs(pairs: impl IntoIterator<Item = (String, ConfigValue)>) -> Self {
+impl FromIterator<(String, ConfigValue)> for CliSource {
+    fn from_iter<I: IntoIterator<Item = (String, ConfigValue)>>(iter: I) -> Self {
         Self {
-            values: pairs.into_iter().collect(),
+            values: iter.into_iter().collect(),
         }
     }
 }

@@ -29,10 +29,10 @@ fn main() {
 
     let provider = SealedFileKeyProvider::new(blob_path, unsealer);
     let secret_key = provider.key("app").expect("failed to unseal key");
-    let encryptor = Aes256GcmEncryptor::new(&secret_key);
+    let encryptor = Aes256GcmEncryptor::from(&secret_key);
 
     let config = ConfigLoader::<AppConfig>::default()
-        .with_source(EnvSource::new("APP"))
+        .with_source(EnvSource::from("APP"))
         .with_encryptor(encryptor)
         .load()
         .expect("failed to load config");

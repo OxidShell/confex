@@ -15,11 +15,11 @@ struct GameConfig {
 
 fn main() {
     let config = ConfigLoader::<GameConfig>::default()
-        .with_source(EnvSource::new("GAME"))
+        .with_source(EnvSource::from("GAME"))
         .load()
         .expect("failed to load config");
 
-    let handle = ConfigHandle::new(config);
+    let handle = ConfigHandle::from(config);
     let reader = handle.clone(); // another "component" reading the same config
 
     println!("before: volume={} fullscreen={}", handle.read().volume, handle.read().fullscreen);

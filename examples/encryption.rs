@@ -26,12 +26,12 @@ fn main() {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("key");
 
-    let provider = FileKeyProvider::new(key_path);
+    let provider = FileKeyProvider::from(key_path);
     let secret_key = provider.key("vault").expect("failed to load/create key");
-    let encryptor = Aes256GcmEncryptor::new(&secret_key);
+    let encryptor = Aes256GcmEncryptor::from(&secret_key);
 
     let config = ConfigLoader::<VaultConfig>::default()
-        .with_source(EnvSource::new("VAULT"))
+        .with_source(EnvSource::from("VAULT"))
         .with_encryptor(encryptor)
         .load()
         .expect("failed to load config");

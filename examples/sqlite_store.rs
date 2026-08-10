@@ -31,7 +31,7 @@ fn main() {
     // Read them back via SqliteSource (acts as a Source in the merge chain).
     let config = ConfigLoader::<Prefs>::default()
         .with_source(SqliteSource::new(&db_path, "prefs"))
-        .with_source(EnvSource::new("PREFS"))
+        .with_source(EnvSource::from("PREFS"))
         .load()
         .expect("failed to load config");
 

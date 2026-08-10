@@ -36,9 +36,9 @@ fn main() {
         // lowest priority
         .with_source(FileSource::new(vec!["app.toml".into()], TomlFormat))
         // mid priority
-        .with_source(EnvSource::new("APP"))
+        .with_source(EnvSource::from("APP"))
         // highest priority
-        .with_source(CliSource::from_pairs(cli_pairs))
+        .with_source(cli_pairs.into_iter().collect::<CliSource>())
         .load()
         .expect("failed to load config");
 

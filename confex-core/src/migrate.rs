@@ -22,11 +22,6 @@ pub struct MigrationChain {
 
 impl MigrationChain {
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
     pub fn with_step(mut self, step: impl Migration + 'static) -> Self {
         self.steps.push(Box::new(step));
         self

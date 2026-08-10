@@ -14,11 +14,11 @@ struct AppConfig {
 fn main() {
     // MYAPP_HOST=localhost MYAPP_PORT=8080 cargo run --example basic
     let config = ConfigLoader::<AppConfig>::default()
-        .with_source(EnvSource::new("MYAPP"))
+        .with_source(EnvSource::from("MYAPP"))
         .load()
         .expect("failed to load config");
 
-    let handle = ConfigHandle::new(config);
+    let handle = ConfigHandle::from(config);
     let cfg = handle.read();
     println!(
         "host={} port={} nickname={:?} tags={:?}",

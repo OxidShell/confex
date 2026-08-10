@@ -29,9 +29,8 @@ pub struct Aes256GcmEncryptor {
     cipher: Aes256Gcm,
 }
 
-impl Aes256GcmEncryptor {
-    #[must_use]
-    pub fn new(key: &SecretKey) -> Self {
+impl From<&SecretKey> for Aes256GcmEncryptor {
+    fn from(key: &SecretKey) -> Self {
         Self {
             cipher: Aes256Gcm::new(key.as_bytes().into()),
         }
