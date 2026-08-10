@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Core engine for confex — source merging, hot-reload, migrations, and encryption"
+description = "Core engine for confex - source merging, hot-reload, migrations, and encryption"
 keywords = ["config", "configuration", "hot-reload", "toml", "sqlite"]
 categories = ["config", "filesystem"]
 

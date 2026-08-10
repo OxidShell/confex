@@ -6,7 +6,7 @@ resolver = "2"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/s4rch/confex"
+repository = "https://github.com/OxidShell/confex"
 rust-version = "1.88"
 
 [package]
@@ -16,7 +16,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Layered config library — merges files, env vars, CLI, and SQLite into a typed struct with selective per-source hot-reload"
+description = "Layered config library - merges files, env vars, CLI, and SQLite into a typed struct with selective per-source hot-reload"
 keywords = ["config", "configuration", "hot-reload", "toml", "sqlite"]
 categories = ["config", "filesystem"]
 readme = "README.md"
@@ -35,9 +35,9 @@ toml = ["confex-core/toml"]
 [dependencies]
 confex-core = { path = "confex-core", version = "0.1" }
 confex-macros = { path = "confex-macros", version = "0.1", optional = true }
-serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 
 [[example]]
