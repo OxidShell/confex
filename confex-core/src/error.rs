@@ -139,8 +139,11 @@ impl std::error::Error for MigrationError {}
 pub enum KeyError {
     Io(std::io::Error),
     InvalidLength(usize),
+    /// No Secret Service daemon available (headless or server environment).
     #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-    Keyring(keyutils::Error),
+    NoDaemon,
+    #[cfg(all(target_os = "linux", feature = "native-keyring"))]
+    SecretService(String),
     #[cfg(all(target_os = "macos", feature = "native-keyring"))]
     Keychain(security_framework::base::Error),
     #[cfg(all(windows, feature = "native-keyring"))]
@@ -159,7 +162,9 @@ impl fmt::Display for KeyError {
                 write!(f, "invalid key length: expected 32 bytes, got {n}")
             }
             #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-            Self::Keyring(e) => write!(f, "kernel keyring error: {e}"),
+            Self::NoDaemon => write!(f, "Secret Service daemon not available"),
+            #[cfg(all(target_os = "linux", feature = "native-keyring"))]
+            Self::SecretService(e) => write!(f, "Secret Service error: {e}"),
             #[cfg(all(target_os = "macos", feature = "native-keyring"))]
             Self::Keychain(e) => write!(f, "keychain error: {e}"),
             #[cfg(all(windows, feature = "native-keyring"))]
@@ -177,7 +182,7 @@ impl std::error::Error for KeyError {
         match self {
             Self::Io(e) => Some(e),
             #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-            Self::Keyring(e) => Some(e),
+            Self::NoDaemon | Self::SecretService(_) => None,
             #[cfg(all(target_os = "macos", feature = "native-keyring"))]
             Self::Keychain(e) => Some(e),
             #[cfg(feature = "sealed-key")]
@@ -190,13 +195,6 @@ impl std::error::Error for KeyError {
 impl From<std::io::Error> for KeyError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)
-    }
-}
-
-#[cfg(all(target_os = "linux", feature = "native-keyring"))]
-impl From<keyutils::Error> for KeyError {
-    fn from(e: keyutils::Error) -> Self {
-        Self::Keyring(e)
     }
 }
 

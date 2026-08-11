@@ -69,43 +69,123 @@ impl KeyProvider for FileKeyProvider {
     }
 }
 
-/// Stores the key in the Linux kernel keyring (User keyring).
+/// Stores the key in the system Secret Service (`org.freedesktop.secrets` via D-Bus).
 ///
-/// Session-persistent: survives process restarts within the same login session
-/// but is lost on reboot. Requires the `native-keyring` feature.
+/// Persistent across reboots. Requires a running Secret Service daemon (GNOME Keyring,
+/// `KWallet`). On headless or server systems, use [`FileKeyProvider`] instead.
+///
+/// Requires the `native-keyring` feature.
 #[cfg(all(target_os = "linux", feature = "native-keyring"))]
 #[derive(Debug, Default, Clone, Copy)]
 #[must_use]
-pub struct LinuxKeyring;
+pub struct SecretServiceKeyring;
 
 #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-impl KeyProvider for LinuxKeyring {
+impl KeyProvider for SecretServiceKeyring {
     fn key(&self, app_name: &str) -> Result<SecretKey, KeyError> {
-        use keyutils::{Keyring, SpecialKeyring, keytypes::User};
-
-        let description = format!("confex:{app_name}");
-        let mut keyring = Keyring::attach_or_create(SpecialKeyring::User)
-            .map_err(KeyError::Keyring)?;
-
-        match keyring.search_for_key::<User>(description.as_str(), None) {
-            Ok(key) => {
-                let data = key.read().map_err(KeyError::Keyring)?;
-                let len = data.len();
-                let raw: [u8; 32] = data
-                    .try_into()
-                    .map_err(|_| KeyError::InvalidLength(len))?;
-                Ok(SecretKey(raw))
-            }
-            Err(_) => {
-                let mut raw = [0u8; 32];
-                rand::thread_rng().fill_bytes(&mut raw);
-                keyring
-                    .add_key::<User>(description.as_str(), raw.as_ref())
-                    .map_err(KeyError::Keyring)?;
-                Ok(SecretKey(raw))
-            }
-        }
+        ss_get_or_create(app_name).map(SecretKey)
     }
+}
+
+#[cfg(all(target_os = "linux", feature = "native-keyring"))]
+fn ss_get_or_create(app_name: &str) -> Result<[u8; 32], KeyError> {
+    use std::collections::HashMap;
+
+    use zbus::{
+        blocking::{Connection, Proxy},
+        zvariant::{OwnedObjectPath, OwnedValue, Value},
+    };
+
+    const SERVICE: &str = "org.freedesktop.secrets";
+    const SERVICE_PATH: &str = "/org/freedesktop/secrets";
+    const SERVICE_IFACE: &str = "org.freedesktop.Secret.Service";
+    const ITEM_IFACE: &str = "org.freedesktop.Secret.Item";
+    const COLLECTION_IFACE: &str = "org.freedesktop.Secret.Collection";
+
+    let conn = Connection::session().map_err(|_| KeyError::NoDaemon)?;
+
+    let svc = Proxy::new(&conn, SERVICE, SERVICE_PATH, SERVICE_IFACE)
+        .map_err(|e| KeyError::SecretService(e.to_string()))?;
+
+    // Plain session — no transport encryption needed on local socket.
+    let (_out, session): (OwnedValue, OwnedObjectPath) = svc
+        .call("OpenSession", &("plain", Value::from("")))
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("ServiceUnknown") {
+                KeyError::NoDaemon
+            } else {
+                KeyError::SecretService(msg)
+            }
+        })?;
+
+    let attrs: HashMap<&str, &str> = [("application", "confex"), ("name", app_name)]
+        .into_iter()
+        .collect();
+
+    let (mut unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) =
+        svc.call("SearchItems", &attrs)
+            .map_err(|e| KeyError::SecretService(e.to_string()))?;
+
+    if !locked.is_empty() {
+        let (newly, _prompt): (Vec<OwnedObjectPath>, OwnedObjectPath) = svc
+            .call("Unlock", &locked)
+            .map_err(|e| KeyError::SecretService(e.to_string()))?;
+        unlocked.extend(newly);
+    }
+
+    if let Some(item_path) = unlocked.into_iter().next() {
+        let item = Proxy::new(&conn, SERVICE, item_path, ITEM_IFACE)
+            .map_err(|e| KeyError::SecretService(e.to_string()))?;
+        let (_sess, _params, value, _ct): (OwnedObjectPath, Vec<u8>, Vec<u8>, String) = item
+            .call("GetSecret", &session.as_ref())
+            .map_err(|e| KeyError::SecretService(e.to_string()))?;
+        let len = value.len();
+        return value.try_into().map_err(|_| KeyError::InvalidLength(len));
+    }
+
+    // No existing item — generate and store.
+    let mut raw = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut raw);
+
+    let collection_path: OwnedObjectPath = svc
+        .call("ReadAlias", &"default")
+        .map_err(|e| KeyError::SecretService(e.to_string()))?;
+
+    if collection_path.as_str() == "/" {
+        return Err(KeyError::SecretService(
+            "no default Secret Service collection".into(),
+        ));
+    }
+
+    let label = format!("confex:{app_name}");
+    let item_attrs: HashMap<String, String> = [
+        ("application".to_owned(), "confex".to_owned()),
+        ("name".to_owned(), app_name.to_owned()),
+    ]
+    .into_iter()
+    .collect();
+    let mut props: HashMap<String, Value<'_>> = HashMap::new();
+    props.insert(
+        "org.freedesktop.Secret.Item.Label".to_owned(),
+        Value::from(label.as_str()),
+    );
+    props.insert(
+        "org.freedesktop.Secret.Item.Attributes".to_owned(),
+        Value::from(item_attrs),
+    );
+
+    // Secret struct: (session_path, parameters, value, content_type)
+    let secret = (session.as_ref(), &b""[..], &raw[..], "application/octet-stream");
+
+    let collection = Proxy::new(&conn, SERVICE, collection_path, COLLECTION_IFACE)
+        .map_err(|e| KeyError::SecretService(e.to_string()))?;
+
+    let _: (OwnedObjectPath, OwnedObjectPath) = collection
+        .call("CreateItem", &(props, secret, true))
+        .map_err(|e| KeyError::SecretService(e.to_string()))?;
+
+    Ok(raw)
 }
 
 /// Stores the key in the macOS Keychain under service `"confex"`.
@@ -392,30 +472,7 @@ impl Unsealer for PassphraseUnsealer {
     }
 }
 
-#[cfg(all(target_os = "linux", feature = "native-keyring"))]
-fn keyring_read(description: &str) -> Option<[u8; 32]> {
-    use keyutils::{Keyring, SpecialKeyring, keytypes::User};
-
-    let keyring = Keyring::attach_or_create(SpecialKeyring::User).ok()?;
-    let key = keyring.search_for_key::<User>(description, None).ok()?;
-    let data = key.read().ok()?;
-    data.try_into().ok()
-}
-
-#[cfg(all(target_os = "linux", feature = "native-keyring"))]
-fn keyring_write(description: &str, raw: &[u8; 32]) {
-    use keyutils::{Keyring, SpecialKeyring, keytypes::User};
-
-    if let Ok(mut keyring) = Keyring::attach_or_create(SpecialKeyring::User) {
-        // Best-effort cache: ignore errors.
-        let _ = keyring.add_key::<User>(description, raw.as_ref());
-    }
-}
-
 /// Stores a sealed (encrypted) key blob on disk, using a pluggable [`Unsealer`].
-///
-/// On Linux with the `linux-keyring` feature, caches the unsealed key in the
-/// kernel keyring after the first unseal to avoid repeated KDF cost.
 #[cfg(feature = "sealed-key")]
 pub struct SealedFileKeyProvider<U: Unsealer> {
     path: PathBuf,
@@ -433,21 +490,9 @@ impl<U: Unsealer> SealedFileKeyProvider<U> {
 #[cfg(feature = "sealed-key")]
 impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
     fn key(&self, _app_name: &str) -> Result<SecretKey, KeyError> {
-        #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-        let cache_desc = format!("confex.sealed:{_app_name}");
-
-        #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-        if let Some(raw) = keyring_read(&cache_desc) {
-            return Ok(SecretKey(raw));
-        }
-
         if self.path.exists() {
             let blob = fs::read(&self.path)?;
             let raw = self.unsealer.unseal(&blob)?;
-
-            #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-            keyring_write(&cache_desc, &raw);
-
             return Ok(SecretKey(raw));
         }
 
@@ -467,22 +512,19 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
             fs::set_permissions(&self.path, fs::Permissions::from_mode(0o600))?;
         }
 
-        #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-        keyring_write(&cache_desc, &raw);
-
         Ok(SecretKey(raw))
     }
 }
 
 /// Platform-native keyring provider, selected at compile time.
 ///
-/// - Linux: [`LinuxKeyring`] (kernel keyring, session-persistent)
+/// - Linux: [`SecretServiceKeyring`] (Secret Service via D-Bus, reboot-persistent)
 /// - macOS: [`MacOsKeychain`] (system Keychain, login-persistent)
 /// - Windows: not aliased — use [`WindowsDpapi`] directly (requires a blob path).
 ///
 /// Requires the `native-keyring` feature.
 #[cfg(all(target_os = "linux", feature = "native-keyring"))]
-pub type NativeKeyring = LinuxKeyring;
+pub type NativeKeyring = SecretServiceKeyring;
 
 #[cfg(all(target_os = "macos", feature = "native-keyring"))]
 pub type NativeKeyring = MacOsKeychain;
@@ -504,10 +546,14 @@ mod tests {
 
     #[cfg(all(target_os = "linux", feature = "native-keyring"))]
     #[test]
-    fn linux_keyring_stores_and_retrieves() {
-        let provider = LinuxKeyring;
-        let app = "confex-test-keyring-42";
-        let k1 = provider.key(app).unwrap();
+    fn secret_service_stores_and_retrieves() {
+        let provider = SecretServiceKeyring;
+        let app = "confex-test-ss-42";
+        let k1 = match provider.key(app) {
+            Ok(k) => k,
+            Err(KeyError::NoDaemon) => return,
+            Err(e) => panic!("{e}"),
+        };
         let k2 = provider.key(app).unwrap();
         assert_eq!(k1.as_bytes(), k2.as_bytes());
     }

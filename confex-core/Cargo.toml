@@ -12,7 +12,7 @@ categories = ["config", "filesystem"]
 [features]
 sqlite-backend = ["dep:rusqlite"]
 hot-reload = ["dep:notify"]
-native-keyring = ["dep:keyutils", "dep:security-framework", "dep:windows"]
+native-keyring = ["dep:zbus", "dep:security-framework", "dep:windows"]
 sealed-key = ["dep:argon2"]
 async = []
 json = ["dep:serde_json"]
@@ -32,7 +32,7 @@ notify = { version = "6", optional = true }
 argon2 = { version = "0.5", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-keyutils = { version = "0.4", optional = true }
+zbus = { version = "4", features = ["blocking"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "2", optional = true }
