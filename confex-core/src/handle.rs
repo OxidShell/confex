@@ -8,10 +8,7 @@ use arc_swap::ArcSwap;
 use serde::Serialize;
 
 use crate::{
-    config::ConfigSchema,
-    deserialize::to_config_value,
-    format::Format,
-    value::ConfigValue,
+    config::ConfigSchema, deserialize::to_config_value, format::Format, value::ConfigValue,
 };
 
 #[cfg(feature = "hot-reload")]
@@ -129,6 +126,25 @@ impl<T: ConfigSchema> ConfigHandle<T> {
 }
 
 impl<T: ConfigSchema + Clone + Serialize> ConfigHandle<T> {
+    /// Write-back mode: no file watcher, but every [`WriteGuard`] drop persists to `path`.
+    ///
+    /// Use this when you want `config.write()` to auto-save without spinning up a
+    /// hot-reload thread.
+    #[must_use]
+    pub fn write_back(
+        initial: T,
+        path: impl Into<std::path::PathBuf>,
+        format: impl Format + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            swap: Arc::new(ArcSwap::from_pointee(initial)),
+            write_back: Some(Arc::new(FileWriteBack {
+                path: path.into(),
+                format: Arc::new(format),
+            })),
+        }
+    }
+
     /// Return a write guard. On drop the guard:
     ///
     /// 1. Serializes the modified value and writes it to the config file (watcher mode).
@@ -193,9 +209,13 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
         let reload_bg = Arc::clone(reload);
 
         let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
-        let mut watcher =
-            notify::RecommendedWatcher::new(move |ev| { let _ = tx.send(ev); }, Config::default())
-                .map_err(|e| HotReloadError::Watch(e.to_string()))?;
+        let mut watcher = notify::RecommendedWatcher::new(
+            move |ev| {
+                let _ = tx.send(ev);
+            },
+            Config::default(),
+        )
+        .map_err(|e| HotReloadError::Watch(e.to_string()))?;
 
         watcher
             .watch(watch_path, RecursiveMode::NonRecursive)
@@ -206,7 +226,10 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
             .spawn(move || watcher_loop(&rx, &swap_bg, &reload_bg, debounce))
             .map_err(HotReloadError::Io)?;
 
-        Ok((Self { swap, write_back }, WatcherHandle { _watcher: watcher }))
+        Ok((
+            Self { swap, write_back },
+            WatcherHandle { _watcher: watcher },
+        ))
     }
 }
 
@@ -223,7 +246,10 @@ fn watcher_loop<T: Send + Sync + 'static>(
         // Block until the first event for this change burst.
         match rx.recv() {
             Ok(Ok(_)) => {}
-            Ok(Err(e)) => { tracing::warn!("watcher error: {e}"); continue; }
+            Ok(Err(e)) => {
+                tracing::warn!("watcher error: {e}");
+                continue;
+            }
             Err(_) => break,
         }
         // Drain additional events within the debounce window.
@@ -276,9 +302,13 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
         let swap_bg = std::sync::Arc::clone(&swap);
 
         let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
-        let mut watcher =
-            notify::RecommendedWatcher::new(move |ev| { let _ = tx.send(ev); }, Config::default())
-                .map_err(|e| HotReloadError::Watch(e.to_string()))?;
+        let mut watcher = notify::RecommendedWatcher::new(
+            move |ev| {
+                let _ = tx.send(ev);
+            },
+            Config::default(),
+        )
+        .map_err(|e| HotReloadError::Watch(e.to_string()))?;
 
         let mut registered: HashSet<PathBuf> = HashSet::new();
         for entry in &entries {
@@ -306,7 +336,13 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
             })
             .map_err(HotReloadError::Io)?;
 
-        Ok((Self { swap, write_back: None }, WatcherHandle { _watcher: watcher }))
+        Ok((
+            Self {
+                swap,
+                write_back: None,
+            },
+            WatcherHandle { _watcher: watcher },
+        ))
     }
 }
 
@@ -456,8 +492,12 @@ mod tests {
     impl ConfigSchema for Cfg {
         const APP_NAME: &'static str = "test";
         const SCHEMA_VERSION: u32 = 1;
-        fn field_strategies() -> FieldStrategies { &[] }
-        fn encrypted_fields() -> &'static [&'static str] { &[] }
+        fn field_strategies() -> FieldStrategies {
+            &[]
+        }
+        fn encrypted_fields() -> &'static [&'static str] {
+            &[]
+        }
     }
 
     #[test]
@@ -538,7 +578,9 @@ mod tests {
             move || {
                 let src = FileSource::new(vec![path_clone.clone()], TomlFormat);
                 let cv = src.collect()?;
-                Ok(serde::de::Deserialize::deserialize(crate::deserialize::ConfigValueDeserializer(cv))?)
+                Ok(serde::de::Deserialize::deserialize(
+                    crate::deserialize::ConfigValueDeserializer(cv),
+                )?)
             },
             WatchOptions::default(),
         )

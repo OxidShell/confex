@@ -220,149 +220,123 @@ impl KeyProvider for MacOsKeychain {
     }
 }
 
-/// Stores a DPAPI-encrypted key blob at `blob_path`.
+/// Stores the key in the Windows Credential Manager.
 ///
-/// Requires the `windows-dpapi` feature. Windows-only.
+/// Persistent across reboots, bound to the current user. Requires the
+/// `native-keyring` feature.
 #[cfg(all(windows, feature = "native-keyring"))]
-pub struct WindowsDpapi {
-    blob_path: PathBuf,
-}
+#[derive(Debug, Default, Clone, Copy)]
+#[must_use]
+pub struct WindowsCredentialManager;
 
 #[cfg(all(windows, feature = "native-keyring"))]
-impl From<PathBuf> for WindowsDpapi {
-    fn from(blob_path: PathBuf) -> Self {
-        Self { blob_path }
-    }
-}
-
-#[cfg(all(windows, feature = "native-keyring"))]
-impl KeyProvider for WindowsDpapi {
-    fn key(&self, _app_name: &str) -> Result<SecretKey, KeyError> {
-        if self.blob_path.exists() {
-            let blob = fs::read(&self.blob_path)?;
-            let plain = dpapi_unprotect(&blob)?;
-            let len = plain.len();
-            let raw: [u8; 32] = plain
-                .try_into()
-                .map_err(|_| KeyError::InvalidLength(len))?;
+impl KeyProvider for WindowsCredentialManager {
+    fn key(&self, app_name: &str) -> Result<SecretKey, KeyError> {
+        if let Some(raw) = cred_read(app_name)? {
             return Ok(SecretKey(raw));
         }
-
         let mut raw = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut raw);
-
-        let blob = dpapi_protect(&raw)?;
-
-        if let Some(parent) = self.blob_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&self.blob_path, &blob)?;
-
+        cred_write(app_name, &raw)?;
         Ok(SecretKey(raw))
     }
 }
 
 #[cfg(all(windows, feature = "native-keyring"))]
-unsafe fn dpapi_protect(data: &[u8]) -> Result<Vec<u8>, KeyError> {
-    use windows::{
-        Win32::{
-            Foundation::LocalFree,
-            Security::Cryptography::{
-                CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData,
-            },
-            System::Memory::HLOCAL,
-        },
-        core::PWSTR,
-    };
-
-    let cb_data =
-        u32::try_from(data.len()).map_err(|_| KeyError::Dpapi("data too large".into()))?;
-    let in_blob = CRYPT_INTEGER_BLOB {
-        cbData: cb_data,
-        // SAFETY: CryptProtectData takes the input blob as read-only; the pointer is valid
-        // for the duration of the call and data outlives it.
-        pbData: data.as_ptr().cast_mut(),
-    };
-    let mut out_blob = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: std::ptr::null_mut(),
-    };
-
-    // SAFETY: All pointers are either null (optional params) or valid stack/heap references.
-    // CryptProtectData allocates out_blob.pbData via LocalAlloc; we free it with LocalFree.
-    let ok = unsafe {
-        CryptProtectData(
-            &in_blob,
-            PWSTR::null(),
-            None,
-            None,
-            None,
-            CRYPTPROTECT_UI_FORBIDDEN,
-            &mut out_blob,
-        )
-    };
-    if !ok.as_bool() {
-        return Err(KeyError::Dpapi("CryptProtectData failed".into()));
-    }
-
-    let len = out_blob.cbData as usize;
-    // SAFETY: out_blob.pbData was allocated by CryptProtectData and is valid for `len` bytes.
-    let result = unsafe { std::slice::from_raw_parts(out_blob.pbData, len) }.to_vec();
-    // SAFETY: out_blob.pbData was allocated by LocalAlloc (via CryptProtectData).
-    unsafe { LocalFree(HLOCAL(out_blob.pbData.cast())) };
-
-    Ok(result)
+fn cred_target(app_name: &str) -> Vec<u16> {
+    format!("confex:{app_name}")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 #[cfg(all(windows, feature = "native-keyring"))]
-unsafe fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, KeyError> {
-    use windows::{
-        Win32::{
-            Foundation::LocalFree,
-            Security::Cryptography::{
-                CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData,
-            },
-            System::Memory::HLOCAL,
-        },
+fn cred_read(app_name: &str) -> Result<Option<[u8; 32]>, KeyError> {
+    use windows::Win32::{
+        Foundation::{ERROR_NOT_FOUND, GetLastError},
+        Security::Credentials::{CredFree, CredReadW, CRED_TYPE_GENERIC},
     };
+    use windows::core::PCWSTR;
 
-    let cb_data =
-        u32::try_from(blob.len()).map_err(|_| KeyError::Dpapi("blob too large".into()))?;
-    let in_blob = CRYPT_INTEGER_BLOB {
-        cbData: cb_data,
-        // SAFETY: CryptUnprotectData takes the input blob as read-only; the pointer is valid
-        // for the duration of the call and blob outlives it.
-        pbData: blob.as_ptr().cast_mut(),
-    };
-    let mut out_blob = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: std::ptr::null_mut(),
-    };
+    let target = cred_target(app_name);
+    let mut pcred = std::ptr::null_mut();
 
-    // SAFETY: All optional parameters are null; in_blob and out_blob are valid references.
-    // CryptUnprotectData allocates out_blob.pbData via LocalAlloc; freed below with LocalFree.
-    let ok = unsafe {
-        CryptUnprotectData(
-            &in_blob,
-            None,
-            None,
-            None,
-            None,
-            CRYPTPROTECT_UI_FORBIDDEN,
-            &mut out_blob,
-        )
-    };
+    // SAFETY: target is a valid null-terminated UTF-16 string; pcred is a valid out-pointer.
+    let ok = unsafe { CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0, &mut pcred) };
+
     if !ok.as_bool() {
-        return Err(KeyError::Dpapi("CryptUnprotectData failed".into()));
+        // SAFETY: called immediately after a failed Win32 API on the same thread.
+        let err = unsafe { GetLastError() };
+        return if err == ERROR_NOT_FOUND {
+            Ok(None)
+        } else {
+            Err(KeyError::CredentialManager(format!(
+                "CredReadW failed: {err:?}"
+            )))
+        };
     }
 
-    let len = out_blob.cbData as usize;
-    // SAFETY: out_blob.pbData was allocated by CryptUnprotectData and is valid for `len` bytes.
-    let result = unsafe { std::slice::from_raw_parts(out_blob.pbData, len) }.to_vec();
-    // SAFETY: out_blob.pbData was allocated by LocalAlloc (via CryptUnprotectData).
-    unsafe { LocalFree(HLOCAL(out_blob.pbData.cast())) };
+    // SAFETY: CredReadW succeeded; pcred points to a valid CREDENTIALW.
+    let cred = unsafe { &*pcred };
+    let blob_size = cred.CredentialBlobSize as usize;
 
-    Ok(result)
+    if blob_size != 32 {
+        // SAFETY: pcred was allocated by CredReadW.
+        unsafe { CredFree(pcred.cast()) };
+        return Err(KeyError::InvalidLength(blob_size));
+    }
+
+    // SAFETY: CredentialBlob is valid for CredentialBlobSize bytes.
+    let raw: [u8; 32] = unsafe {
+        std::slice::from_raw_parts(cred.CredentialBlob, 32)
+            .try_into()
+            .unwrap()
+    };
+
+    // SAFETY: pcred was allocated by CredReadW.
+    unsafe { CredFree(pcred.cast()) };
+
+    Ok(Some(raw))
+}
+
+#[cfg(all(windows, feature = "native-keyring"))]
+fn cred_write(app_name: &str, raw: &[u8; 32]) -> Result<(), KeyError> {
+    use windows::Win32::Security::Credentials::{
+        CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CredWriteW,
+    };
+    use windows::core::PWSTR;
+
+    let mut target = cred_target(app_name);
+    let mut comment: Vec<u16> = "confex encryption key"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let cred = CREDENTIALW {
+        Flags: 0,
+        Type: CRED_TYPE_GENERIC,
+        TargetName: PWSTR(target.as_mut_ptr()),
+        Comment: PWSTR(comment.as_mut_ptr()),
+        LastWritten: Default::default(),
+        CredentialBlobSize: 32,
+        // SAFETY: raw lives for the duration of this call; CredWriteW only reads it.
+        CredentialBlob: raw.as_ptr().cast_mut(),
+        Persist: CRED_PERSIST_LOCAL_MACHINE,
+        AttributeCount: 0,
+        Attributes: std::ptr::null_mut(),
+        TargetAlias: PWSTR::null(),
+        UserName: PWSTR::null(),
+    };
+
+    // SAFETY: cred is a fully initialised CREDENTIALW; all pointer fields are valid for
+    // the duration of the call (target, comment, raw are on the stack above).
+    let ok = unsafe { CredWriteW(&cred, 0) };
+
+    if !ok.as_bool() {
+        return Err(KeyError::CredentialManager("CredWriteW failed".into()));
+    }
+
+    Ok(())
 }
 
 /// Pluggable strategy for wrapping and unwrapping a 32-byte key into/from an opaque blob.
@@ -520,7 +494,7 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
 ///
 /// - Linux: [`SecretServiceKeyring`] (Secret Service via D-Bus, reboot-persistent)
 /// - macOS: [`MacOsKeychain`] (system Keychain, login-persistent)
-/// - Windows: not aliased — use [`WindowsDpapi`] directly (requires a blob path).
+/// - Windows: [`WindowsCredentialManager`] (Credential Manager, reboot-persistent)
 ///
 /// Requires the `native-keyring` feature.
 #[cfg(all(target_os = "linux", feature = "native-keyring"))]
@@ -528,6 +502,9 @@ pub type NativeKeyring = SecretServiceKeyring;
 
 #[cfg(all(target_os = "macos", feature = "native-keyring"))]
 pub type NativeKeyring = MacOsKeychain;
+
+#[cfg(all(windows, feature = "native-keyring"))]
+pub type NativeKeyring = WindowsCredentialManager;
 
 #[cfg(test)]
 mod tests {

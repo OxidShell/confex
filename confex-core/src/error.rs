@@ -147,7 +147,7 @@ pub enum KeyError {
     #[cfg(all(target_os = "macos", feature = "native-keyring"))]
     Keychain(security_framework::base::Error),
     #[cfg(all(windows, feature = "native-keyring"))]
-    Dpapi(String),
+    CredentialManager(String),
     #[cfg(feature = "sealed-key")]
     Kdf(argon2::Error),
     InvalidBlob,
@@ -168,7 +168,7 @@ impl fmt::Display for KeyError {
             #[cfg(all(target_os = "macos", feature = "native-keyring"))]
             Self::Keychain(e) => write!(f, "keychain error: {e}"),
             #[cfg(all(windows, feature = "native-keyring"))]
-            Self::Dpapi(msg) => write!(f, "DPAPI error: {msg}"),
+            Self::CredentialManager(msg) => write!(f, "Credential Manager error: {msg}"),
             #[cfg(feature = "sealed-key")]
             Self::Kdf(e) => write!(f, "KDF error: {e}"),
             Self::InvalidBlob => write!(f, "sealed key blob is invalid"),

@@ -20,7 +20,7 @@ confex merges sources in priority order, runs schema migrations on stale data, a
 | `sqlite-backend` | SQLite key-value store source |
 | `hot-reload` | Live config handle with selective per-source file watcher |
 | `async` | Async source trait + `AsyncConfigLoader` |
-| `native-keyring` | OS keyring key provider (Linux kernel keyring, macOS Keychain) |
+| `native-keyring` | OS keyring key provider (Linux Secret Service, macOS Keychain, Windows Credential Manager) |
 | `sealed-key` | Passphrase-sealed key blob (Argon2id + AES-256-GCM) |
 
 Default features: `toml`, `sqlite-backend`, `hot-reload`.

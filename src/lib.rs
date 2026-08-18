@@ -10,11 +10,11 @@ pub use confex_core::format::Format;
 pub use confex_core::format::TomlFormat;
 pub use confex_core::key::{FileKeyProvider, KeyProvider, SecretKey};
 
-#[cfg(all(not(windows), feature = "native-keyring"))]
+#[cfg(feature = "native-keyring")]
 pub use confex_core::key::NativeKeyring;
 
 #[cfg(all(windows, feature = "native-keyring"))]
-pub use confex_core::key::WindowsDpapi;
+pub use confex_core::key::WindowsCredentialManager;
 
 #[cfg(feature = "sealed-key")]
 pub use confex_core::key::{PassphraseUnsealer, SealedFileKeyProvider, Unsealer};
