@@ -185,8 +185,6 @@ impl std::error::Error for KeyError {
             Self::NoDaemon | Self::SecretService(_) => None,
             #[cfg(all(target_os = "macos", feature = "native-keyring"))]
             Self::Keychain(e) => Some(e),
-            #[cfg(feature = "sealed-key")]
-            Self::Kdf(e) => Some(e),
             _ => None,
         }
     }
