@@ -22,9 +22,10 @@ categories = ["config", "filesystem"]
 readme = "README.md"
 
 [features]
-default = ["macros", "sqlite-backend", "hot-reload", "toml"]
+default = ["macros", "sqlite-backend", "bundled-sqlite", "hot-reload", "toml"]
 macros = ["dep:confex-macros"]
 sqlite-backend = ["confex-core/sqlite-backend"]
+bundled-sqlite = ["confex-core/bundled-sqlite"]
 hot-reload = ["confex-core/hot-reload"]
 native-keyring = ["confex-core/native-keyring"]
 sealed-key = ["confex-core/sealed-key"]
