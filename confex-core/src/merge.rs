@@ -49,18 +49,13 @@ pub fn merge(
                         }
                         over_val
                     }
-                    MergeStrategy::Extend => {
-                        match (current, over_val) {
-                            (
-                                Some(ConfigValue::Array(mut base_arr)),
-                                ConfigValue::Array(over_arr),
-                            ) => {
-                                base_arr.extend(over_arr);
-                                ConfigValue::Array(base_arr)
-                            }
-                            (_, val) => val,
+                    MergeStrategy::Extend => match (current, over_val) {
+                        (Some(ConfigValue::Array(mut base_arr)), ConfigValue::Array(over_arr)) => {
+                            base_arr.extend(over_arr);
+                            ConfigValue::Array(base_arr)
                         }
-                    }
+                        (_, val) => val,
+                    },
                     MergeStrategy::Deep => match (current, over_val) {
                         (Some(base_inner), over_inner) => merge(base_inner, over_inner, strategies),
                         (None, val) => val,
@@ -129,11 +124,17 @@ mod tests {
     fn deep_merge_nested_tables() {
         let base = table(&[(
             "nested",
-            table(&[("a", ConfigValue::Integer(1)), ("b", ConfigValue::Integer(2))]),
+            table(&[
+                ("a", ConfigValue::Integer(1)),
+                ("b", ConfigValue::Integer(2)),
+            ]),
         )]);
         let over = table(&[(
             "nested",
-            table(&[("b", ConfigValue::Integer(3)), ("c", ConfigValue::Integer(4))]),
+            table(&[
+                ("b", ConfigValue::Integer(3)),
+                ("c", ConfigValue::Integer(4)),
+            ]),
         )]);
         assert_eq!(
             merge(base, over, &[("nested", MergeStrategy::Deep)]),

@@ -31,8 +31,12 @@ fn main() {
         .join("prefs.db");
 
     let store = SqliteStore::new(&db_path, Prefs::APP_NAME);
-    store.set("theme", &ConfigValue::String("dark".into())).expect("set failed");
-    store.set("font_size", &ConfigValue::Integer(14)).expect("set failed");
+    store
+        .set("theme", &ConfigValue::String("dark".into()))
+        .expect("set failed");
+    store
+        .set("font_size", &ConfigValue::Integer(14))
+        .expect("set failed");
 
     // app_name and env prefix are injected automatically from `#[config(app_name = "prefs")]`.
     let config = ConfigLoader::<Prefs>::default()
@@ -41,7 +45,10 @@ fn main() {
         .load()
         .expect("failed to load config");
 
-    println!("one-shot — theme={} font_size={}", config.theme, config.font_size);
+    println!(
+        "one-shot — theme={} font_size={}",
+        config.theme, config.font_size
+    );
 
     #[cfg(feature = "hot-reload")]
     {

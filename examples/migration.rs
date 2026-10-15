@@ -18,8 +18,12 @@ struct ChatConfig {
 struct V1ToV2;
 
 impl Migration for V1ToV2 {
-    fn from_version(&self) -> u32 { 1 }
-    fn to_version(&self) -> u32 { 2 }
+    fn from_version(&self) -> u32 {
+        1
+    }
+    fn to_version(&self) -> u32 {
+        2
+    }
 
     fn migrate(&self, mut value: ConfigValue) -> Result<ConfigValue, MigrationError> {
         rename_key(&mut value, "nick", "display_name");
@@ -36,5 +40,8 @@ fn main() {
         .load()
         .expect("failed to load config");
 
-    println!("server={} display_name={}", config.server, config.display_name);
+    println!(
+        "server={} display_name={}",
+        config.server, config.display_name
+    );
 }

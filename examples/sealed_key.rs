@@ -7,8 +7,8 @@ fn main() {
     use std::path::PathBuf;
 
     use confex::{
-        Aes256GcmEncryptor, ConfigLoader, ConfigSchema, EnvSource, KeyProvider,
-        PassphraseUnsealer, SealedFileKeyProvider, app_data_dir,
+        Aes256GcmEncryptor, ConfigLoader, ConfigSchema, EnvSource, KeyProvider, PassphraseUnsealer,
+        SealedFileKeyProvider, app_data_dir,
     };
     use serde::{Deserialize, Serialize};
 
@@ -24,8 +24,8 @@ fn main() {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("keyblob");
 
-    let unsealer = PassphraseUnsealer::from_env("CONFEX_MASTER_KEY")
-        .expect("CONFEX_MASTER_KEY not set");
+    let unsealer =
+        PassphraseUnsealer::from_env("CONFEX_MASTER_KEY").expect("CONFEX_MASTER_KEY not set");
 
     let provider = SealedFileKeyProvider::new(blob_path, unsealer);
     let secret_key = provider.key("app").expect("failed to unseal key");

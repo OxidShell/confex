@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Fields, Lit, Type, TypePath, parse_macro_input, spanned::Spanned as _};
+use syn::{
+    Data, DeriveInput, Fields, Lit, Type, TypePath, parse_macro_input, spanned::Spanned as _,
+};
 
 /// Derive `ConfigSchema` for a struct.
 ///
@@ -41,14 +43,14 @@ fn impl_config_schema(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStre
                 return Err(syn::Error::new(
                     input.span(),
                     "ConfigSchema requires a struct with named fields",
-                ))
+                ));
             }
         },
         _ => {
             return Err(syn::Error::new(
                 input.span(),
                 "ConfigSchema can only be derived for structs",
-            ))
+            ));
         }
     };
 
@@ -186,7 +188,7 @@ fn parse_field_attrs(field: &syn::Field) -> syn::Result<FieldAttrs> {
                                         "unknown merge strategy {other:?}; \
                                          expected replace, replace_if_present, extend, or deep"
                                     ),
-                                ))
+                                ));
                             }
                         });
                         Ok(())
@@ -194,9 +196,8 @@ fn parse_field_attrs(field: &syn::Field) -> syn::Result<FieldAttrs> {
                     _ => Err(meta.error("merge value must be a string literal")),
                 }
             } else {
-                Err(meta.error(
-                    "unknown field config attribute; expected merge, encrypted, or flatten",
-                ))
+                Err(meta
+                    .error("unknown field config attribute; expected merge, encrypted, or flatten"))
             }
         })?;
     }

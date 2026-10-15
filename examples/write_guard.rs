@@ -22,7 +22,11 @@ fn main() {
     let handle = ConfigHandle::from(config);
     let reader = handle.clone(); // another "component" reading the same config
 
-    println!("before: volume={} fullscreen={}", handle.read().volume, handle.read().fullscreen);
+    println!(
+        "before: volume={} fullscreen={}",
+        handle.read().volume,
+        handle.read().fullscreen
+    );
 
     // Mutate through WriteGuard — atomically swaps on drop.
     {
@@ -33,5 +37,8 @@ fn main() {
 
     // All clones see the new value immediately.
     let cfg = reader.read();
-    println!("after:  volume={} fullscreen={}", cfg.volume, cfg.fullscreen);
+    println!(
+        "after:  volume={} fullscreen={}",
+        cfg.volume, cfg.fullscreen
+    );
 }

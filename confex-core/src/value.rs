@@ -157,9 +157,9 @@ impl From<ConfigValue> for toml::Value {
             ConfigValue::Array(arr) => {
                 toml::Value::Array(arr.into_iter().map(Self::from).collect())
             }
-            ConfigValue::Table(map) => toml::Value::Table(
-                map.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
-            ),
+            ConfigValue::Table(map) => {
+                toml::Value::Table(map.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
+            }
         }
     }
 }

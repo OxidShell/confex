@@ -6,7 +6,9 @@
 ///
 /// Run: `cargo run --example multi_source -- --port 9090`
 /// Run: `cargo run --example multi_source --features hot-reload -- --port 9090`
-use confex::{CliSource, ConfigLoader, ConfigSchema, ConfigValue, EnvSource, FileSource, TomlFormat};
+use confex::{
+    CliSource, ConfigLoader, ConfigSchema, ConfigValue, EnvSource, FileSource, TomlFormat,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ConfigSchema)]
@@ -25,9 +27,10 @@ fn cli_source() -> CliSource {
         .filter_map(|chunk| {
             if chunk.len() == 2 {
                 let key = chunk[0].trim_start_matches('-').to_string();
-                let val: ConfigValue = chunk[1]
-                    .parse::<i64>()
-                    .map_or_else(|_| ConfigValue::String(chunk[1].clone()), ConfigValue::Integer);
+                let val: ConfigValue = chunk[1].parse::<i64>().map_or_else(
+                    |_| ConfigValue::String(chunk[1].clone()),
+                    ConfigValue::Integer,
+                );
                 Some((key, val))
             } else {
                 None
@@ -47,7 +50,10 @@ fn main() {
             .load()
             .expect("failed to load config");
 
-        println!("host={} port={} debug={}", config.host, config.port, config.debug);
+        println!(
+            "host={} port={} debug={}",
+            config.host, config.port, config.debug
+        );
     }
 
     // ── selective hot-reload ──────────────────────────────────────────────────
@@ -65,7 +71,12 @@ fn main() {
             .watch_auto(WatchOptions::default())
             .expect("failed to start watcher");
 
-        println!("initial: host={} port={} debug={}", handle.read().host, handle.read().port, handle.read().debug);
+        println!(
+            "initial: host={} port={} debug={}",
+            handle.read().host,
+            handle.read().port,
+            handle.read().debug
+        );
         println!("watching app.toml — edit it to trigger a selective reload");
 
         std::thread::park();

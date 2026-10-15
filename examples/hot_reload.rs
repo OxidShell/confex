@@ -14,9 +14,7 @@
 fn main() {
     use std::{path::PathBuf, thread, time::Duration};
 
-    use confex::{
-        ConfigLoader, ConfigSchema, EnvSource, FileSource, TomlFormat, WatchOptions,
-    };
+    use confex::{ConfigLoader, ConfigSchema, EnvSource, FileSource, TomlFormat, WatchOptions};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize, ConfigSchema)]

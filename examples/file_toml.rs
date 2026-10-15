@@ -29,8 +29,7 @@ struct TlsConfig {
 }
 
 fn config_path() -> PathBuf {
-    std::env::var_os("CONFIG_PATH")
-        .map_or_else(|| PathBuf::from("server.toml"), PathBuf::from)
+    std::env::var_os("CONFIG_PATH").map_or_else(|| PathBuf::from("server.toml"), PathBuf::from)
 }
 
 fn main() {

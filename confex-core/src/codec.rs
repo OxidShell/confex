@@ -153,18 +153,14 @@ fn parse_value(s: &str) -> Result<(ConfigValue, &str), SourceError> {
             }
             Ok((ConfigValue::Table(map), rest))
         }
-        other => Err(SourceError::Backend(format!(
-            "unknown type tag {other:?}"
-        ))),
+        other => Err(SourceError::Backend(format!("unknown type tag {other:?}"))),
     }
 }
 
 fn split_delimiter(s: &str, delim: char) -> Result<(&str, &str), SourceError> {
     s.find(delim)
         .map(|i| (&s[..i], &s[i + delim.len_utf8()..]))
-        .ok_or_else(|| {
-            SourceError::Backend(format!("missing {delim:?} delimiter in {s:?}"))
-        })
+        .ok_or_else(|| SourceError::Backend(format!("missing {delim:?} delimiter in {s:?}")))
 }
 
 #[cfg(test)]

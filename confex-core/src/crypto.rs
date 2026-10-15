@@ -113,9 +113,7 @@ pub fn decrypt_fields(
             };
             let bytes = hex::decode(s.as_str()).map_err(|_| CryptoError::InvalidFormat)?;
             let plain = encryptor.decrypt(&bytes)?;
-            *val = ConfigValue::String(
-                String::from_utf8(plain).map_err(|_| CryptoError::Decrypt)?,
-            );
+            *val = ConfigValue::String(String::from_utf8(plain).map_err(|_| CryptoError::Decrypt)?);
         } else if matches!(val, ConfigValue::Table(_)) {
             decrypt_fields(val, field_names, encryptor)?;
         }

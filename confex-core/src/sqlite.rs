@@ -145,11 +145,7 @@ impl SqliteSource {
 #[cfg(feature = "hot-reload")]
 impl crate::source::WatchableSource for SqliteSource {
     fn watch_paths(&self) -> Vec<std::path::PathBuf> {
-        vec![self
-            .db_path
-            .parent()
-            .unwrap_or(&self.db_path)
-            .to_path_buf()]
+        vec![self.db_path.parent().unwrap_or(&self.db_path).to_path_buf()]
     }
 }
 
@@ -174,8 +170,8 @@ impl Source for SqliteSource {
         let conn = open_wal(&self.db_path)?;
         ensure_schema(&conn)?;
 
-        let mut stmt = conn
-            .prepare("SELECT key, value FROM kv WHERE app_name = ?1 ORDER BY key")?;
+        let mut stmt =
+            conn.prepare("SELECT key, value FROM kv WHERE app_name = ?1 ORDER BY key")?;
 
         let pairs: Vec<(String, String)> = stmt
             .query_map(params![app_name], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -371,8 +367,14 @@ mod tests {
             .set("val", &ConfigValue::Integer(2))
             .unwrap();
 
-        let a = SqliteSource::new(&db).with_app_name("app_a").collect().unwrap();
-        let b = SqliteSource::new(&db).with_app_name("app_b").collect().unwrap();
+        let a = SqliteSource::new(&db)
+            .with_app_name("app_a")
+            .collect()
+            .unwrap();
+        let b = SqliteSource::new(&db)
+            .with_app_name("app_b")
+            .collect()
+            .unwrap();
 
         assert_eq!(a.as_table().unwrap()["val"], ConfigValue::Integer(1));
         assert_eq!(b.as_table().unwrap()["val"], ConfigValue::Integer(2));
@@ -446,8 +448,12 @@ mod tests {
         impl ConfigSchema for Cfg {
             const APP_NAME: &'static str = "watch_test";
             const SCHEMA_VERSION: u32 = 1;
-            fn field_strategies() -> FieldStrategies { &[] }
-            fn encrypted_fields() -> &'static [&'static str] { &[] }
+            fn field_strategies() -> FieldStrategies {
+                &[]
+            }
+            fn encrypted_fields() -> &'static [&'static str] {
+                &[]
+            }
         }
 
         let dir = tempfile::tempdir().unwrap();

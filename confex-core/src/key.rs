@@ -45,9 +45,7 @@ impl KeyProvider for FileKeyProvider {
         if self.path.exists() {
             let bytes = fs::read(&self.path)?;
             let len = bytes.len();
-            let raw: [u8; 32] = bytes
-                .try_into()
-                .map_err(|_| KeyError::InvalidLength(len))?;
+            let raw: [u8; 32] = bytes.try_into().map_err(|_| KeyError::InvalidLength(len))?;
             return Ok(SecretKey(raw));
         }
 
@@ -123,9 +121,9 @@ fn ss_get_or_create(app_name: &str) -> Result<[u8; 32], KeyError> {
         .into_iter()
         .collect();
 
-    let (mut unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) =
-        svc.call("SearchItems", &attrs)
-            .map_err(|e| KeyError::SecretService(e.to_string()))?;
+    let (mut unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = svc
+        .call("SearchItems", &attrs)
+        .map_err(|e| KeyError::SecretService(e.to_string()))?;
 
     if !locked.is_empty() {
         let (newly, _prompt): (Vec<OwnedObjectPath>, OwnedObjectPath) = svc
@@ -176,7 +174,12 @@ fn ss_get_or_create(app_name: &str) -> Result<[u8; 32], KeyError> {
     );
 
     // Secret struct: (session_path, parameters, value, content_type)
-    let secret = (session.as_ref(), &b""[..], &raw[..], "application/octet-stream");
+    let secret = (
+        session.as_ref(),
+        &b""[..],
+        &raw[..],
+        "application/octet-stream",
+    );
 
     let collection = Proxy::new(&conn, SERVICE, collection_path, COLLECTION_IFACE)
         .map_err(|e| KeyError::SecretService(e.to_string()))?;
@@ -204,16 +207,13 @@ impl KeyProvider for MacOsKeychain {
         match get_generic_password("confex", app_name) {
             Ok(data) => {
                 let len = data.len();
-                let raw: [u8; 32] = data
-                    .try_into()
-                    .map_err(|_| KeyError::InvalidLength(len))?;
+                let raw: [u8; 32] = data.try_into().map_err(|_| KeyError::InvalidLength(len))?;
                 Ok(SecretKey(raw))
             }
             Err(_) => {
                 let mut raw = [0u8; 32];
                 rand::thread_rng().fill_bytes(&mut raw);
-                set_generic_password("confex", app_name, &raw)
-                    .map_err(KeyError::Keychain)?;
+                set_generic_password("confex", app_name, &raw).map_err(KeyError::Keychain)?;
                 Ok(SecretKey(raw))
             }
         }
@@ -254,7 +254,7 @@ fn cred_target(app_name: &str) -> Vec<u16> {
 fn cred_read(app_name: &str) -> Result<Option<[u8; 32]>, KeyError> {
     use windows::Win32::{
         Foundation::{ERROR_NOT_FOUND, GetLastError},
-        Security::Credentials::{CredFree, CredReadW, CRED_TYPE_GENERIC},
+        Security::Credentials::{CRED_TYPE_GENERIC, CredFree, CredReadW},
     };
     use windows::core::PCWSTR;
 
@@ -302,7 +302,7 @@ fn cred_read(app_name: &str) -> Result<Option<[u8; 32]>, KeyError> {
 #[cfg(all(windows, feature = "native-keyring"))]
 fn cred_write(app_name: &str, raw: &[u8; 32]) -> Result<(), KeyError> {
     use windows::Win32::Security::Credentials::{
-        CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CredWriteW,
+        CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredWriteW,
     };
     use windows::core::PWSTR;
 
@@ -394,8 +394,7 @@ impl PassphraseUnsealer {
     fn derive_kek(&self, salt: &[u8]) -> Result<[u8; 32], KeyError> {
         use argon2::{Algorithm, Argon2, Params, Version};
 
-        let params =
-            Params::new(65_536, 3, 4, Some(32)).map_err(KeyError::Kdf)?;
+        let params = Params::new(65_536, 3, 4, Some(32)).map_err(KeyError::Kdf)?;
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut kek = [0u8; 32];
         argon2
@@ -416,9 +415,7 @@ impl Unsealer for PassphraseUnsealer {
 
         let kek = self.derive_kek(&salt)?;
         let encryptor = Aes256GcmEncryptor::from(&SecretKey(kek));
-        let encrypted = encryptor
-            .encrypt(key)
-            .map_err(|_| KeyError::InvalidBlob)?;
+        let encrypted = encryptor.encrypt(key).map_err(|_| KeyError::InvalidBlob)?;
 
         // salt (32) + nonce+ciphertext+tag (12+32+16 = 60) = 92 bytes
         let mut blob = Vec::with_capacity(32 + encrypted.len());
@@ -437,12 +434,12 @@ impl Unsealer for PassphraseUnsealer {
         let (salt, ciphertext) = blob.split_at(32);
         let kek = self.derive_kek(salt)?;
         let encryptor = Aes256GcmEncryptor::from(&SecretKey(kek));
-        let plain = encryptor.decrypt(ciphertext).map_err(|_| KeyError::InvalidBlob)?;
+        let plain = encryptor
+            .decrypt(ciphertext)
+            .map_err(|_| KeyError::InvalidBlob)?;
 
         let len = plain.len();
-        plain
-            .try_into()
-            .map_err(|_| KeyError::InvalidLength(len))
+        plain.try_into().map_err(|_| KeyError::InvalidLength(len))
     }
 }
 

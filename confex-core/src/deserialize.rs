@@ -49,9 +49,7 @@ impl<'de> de::Deserializer<'de> for ConfigValueDeserializer {
             ConfigValue::Integer(i) => visitor.visit_i64(i),
             ConfigValue::Float(f) => visitor.visit_f64(f),
             ConfigValue::String(s) => visitor.visit_string(s),
-            ConfigValue::Array(arr) => {
-                visitor.visit_seq(SeqDeserializer(arr.into_iter()))
-            }
+            ConfigValue::Array(arr) => visitor.visit_seq(SeqDeserializer(arr.into_iter())),
             ConfigValue::Table(map) => visitor.visit_map(MapDeserializer::new(map)),
         }
     }
@@ -145,10 +143,7 @@ impl MapDeserializer {
 impl<'de> de::MapAccess<'de> for MapDeserializer {
     type Error = DeserializeError;
 
-    fn next_key_seed<K: de::DeserializeSeed<'de>>(
-        &mut self,
-        seed: K,
-    ) -> Result<Option<K::Value>> {
+    fn next_key_seed<K: de::DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>> {
         match self.iter.next() {
             Some((k, v)) => {
                 self.pending = Some(v);
@@ -159,10 +154,7 @@ impl<'de> de::MapAccess<'de> for MapDeserializer {
         }
     }
 
-    fn next_value_seed<V: de::DeserializeSeed<'de>>(
-        &mut self,
-        seed: V,
-    ) -> Result<V::Value> {
+    fn next_value_seed<V: de::DeserializeSeed<'de>>(&mut self, seed: V) -> Result<V::Value> {
         let v = self.pending.take().expect("called after next_key_seed");
         seed.deserialize(ConfigValueDeserializer(v))
     }
@@ -218,7 +210,9 @@ pub struct ConfigValueSerializer;
 /// # Errors
 /// Returns [`DeserializeError`] if `T` produces a type that cannot be
 /// represented as a `ConfigValue` (e.g. maps with non-string keys).
-pub fn to_config_value<T: serde::Serialize>(value: &T) -> std::result::Result<ConfigValue, DeserializeError> {
+pub fn to_config_value<T: serde::Serialize>(
+    value: &T,
+) -> std::result::Result<ConfigValue, DeserializeError> {
     value.serialize(ConfigValueSerializer)
 }
 
@@ -234,25 +228,51 @@ impl ser::Serializer for ConfigValueSerializer {
     type SerializeStruct = MapSerializer;
     type SerializeStructVariant = StructVariantSerializer;
 
-    fn serialize_bool(self, v: bool) -> Result<ConfigValue> { Ok(ConfigValue::Bool(v)) }
-    fn serialize_i8(self, v: i8) -> Result<ConfigValue> { Ok(ConfigValue::Integer(i64::from(v))) }
-    fn serialize_i16(self, v: i16) -> Result<ConfigValue> { Ok(ConfigValue::Integer(i64::from(v))) }
-    fn serialize_i32(self, v: i32) -> Result<ConfigValue> { Ok(ConfigValue::Integer(i64::from(v))) }
-    fn serialize_i64(self, v: i64) -> Result<ConfigValue> { Ok(ConfigValue::Integer(v)) }
-    fn serialize_i128(self, v: i128) -> Result<ConfigValue> {
-        i64::try_from(v).map(ConfigValue::Integer).map_err(ser::Error::custom)
+    fn serialize_bool(self, v: bool) -> Result<ConfigValue> {
+        Ok(ConfigValue::Bool(v))
     }
-    fn serialize_u8(self, v: u8) -> Result<ConfigValue> { Ok(ConfigValue::Integer(i64::from(v))) }
-    fn serialize_u16(self, v: u16) -> Result<ConfigValue> { Ok(ConfigValue::Integer(i64::from(v))) }
-    fn serialize_u32(self, v: u32) -> Result<ConfigValue> { Ok(ConfigValue::Integer(i64::from(v))) }
+    fn serialize_i8(self, v: i8) -> Result<ConfigValue> {
+        Ok(ConfigValue::Integer(i64::from(v)))
+    }
+    fn serialize_i16(self, v: i16) -> Result<ConfigValue> {
+        Ok(ConfigValue::Integer(i64::from(v)))
+    }
+    fn serialize_i32(self, v: i32) -> Result<ConfigValue> {
+        Ok(ConfigValue::Integer(i64::from(v)))
+    }
+    fn serialize_i64(self, v: i64) -> Result<ConfigValue> {
+        Ok(ConfigValue::Integer(v))
+    }
+    fn serialize_i128(self, v: i128) -> Result<ConfigValue> {
+        i64::try_from(v)
+            .map(ConfigValue::Integer)
+            .map_err(ser::Error::custom)
+    }
+    fn serialize_u8(self, v: u8) -> Result<ConfigValue> {
+        Ok(ConfigValue::Integer(i64::from(v)))
+    }
+    fn serialize_u16(self, v: u16) -> Result<ConfigValue> {
+        Ok(ConfigValue::Integer(i64::from(v)))
+    }
+    fn serialize_u32(self, v: u32) -> Result<ConfigValue> {
+        Ok(ConfigValue::Integer(i64::from(v)))
+    }
     fn serialize_u64(self, v: u64) -> Result<ConfigValue> {
-        i64::try_from(v).map(ConfigValue::Integer).map_err(ser::Error::custom)
+        i64::try_from(v)
+            .map(ConfigValue::Integer)
+            .map_err(ser::Error::custom)
     }
     fn serialize_u128(self, v: u128) -> Result<ConfigValue> {
-        i64::try_from(v).map(ConfigValue::Integer).map_err(ser::Error::custom)
+        i64::try_from(v)
+            .map(ConfigValue::Integer)
+            .map_err(ser::Error::custom)
     }
-    fn serialize_f32(self, v: f32) -> Result<ConfigValue> { Ok(ConfigValue::Float(f64::from(v))) }
-    fn serialize_f64(self, v: f64) -> Result<ConfigValue> { Ok(ConfigValue::Float(v)) }
+    fn serialize_f32(self, v: f32) -> Result<ConfigValue> {
+        Ok(ConfigValue::Float(f64::from(v)))
+    }
+    fn serialize_f64(self, v: f64) -> Result<ConfigValue> {
+        Ok(ConfigValue::Float(v))
+    }
     fn serialize_char(self, v: char) -> Result<ConfigValue> {
         Ok(ConfigValue::String(v.to_string()))
     }
@@ -260,13 +280,21 @@ impl ser::Serializer for ConfigValueSerializer {
         Ok(ConfigValue::String(v.to_owned()))
     }
     fn serialize_bytes(self, v: &[u8]) -> Result<ConfigValue> {
-        Ok(ConfigValue::Array(v.iter().map(|b| ConfigValue::Integer(i64::from(*b))).collect()))
+        Ok(ConfigValue::Array(
+            v.iter()
+                .map(|b| ConfigValue::Integer(i64::from(*b)))
+                .collect(),
+        ))
     }
-    fn serialize_none(self) -> Result<ConfigValue> { Ok(ConfigValue::Null) }
+    fn serialize_none(self) -> Result<ConfigValue> {
+        Ok(ConfigValue::Null)
+    }
     fn serialize_some<T: serde::Serialize + ?Sized>(self, value: &T) -> Result<ConfigValue> {
         value.serialize(self)
     }
-    fn serialize_unit(self) -> Result<ConfigValue> { Ok(ConfigValue::Null) }
+    fn serialize_unit(self) -> Result<ConfigValue> {
+        Ok(ConfigValue::Null)
+    }
     fn serialize_unit_struct(self, _name: &'static str) -> Result<ConfigValue> {
         Ok(ConfigValue::Null)
     }
@@ -346,7 +374,9 @@ impl ser::SerializeSeq for SeqSerializer {
         self.0.push(value.serialize(ConfigValueSerializer)?);
         Ok(())
     }
-    fn end(self) -> Result<ConfigValue> { Ok(ConfigValue::Array(self.0)) }
+    fn end(self) -> Result<ConfigValue> {
+        Ok(ConfigValue::Array(self.0))
+    }
 }
 impl ser::SerializeTuple for SeqSerializer {
     type Ok = ConfigValue;
@@ -354,7 +384,9 @@ impl ser::SerializeTuple for SeqSerializer {
     fn serialize_element<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<()> {
         ser::SerializeSeq::serialize_element(self, value)
     }
-    fn end(self) -> Result<ConfigValue> { ser::SerializeSeq::end(self) }
+    fn end(self) -> Result<ConfigValue> {
+        ser::SerializeSeq::end(self)
+    }
 }
 impl ser::SerializeTupleStruct for SeqSerializer {
     type Ok = ConfigValue;
@@ -362,7 +394,9 @@ impl ser::SerializeTupleStruct for SeqSerializer {
     fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<()> {
         ser::SerializeSeq::serialize_element(self, value)
     }
-    fn end(self) -> Result<ConfigValue> { ser::SerializeSeq::end(self) }
+    fn end(self) -> Result<ConfigValue> {
+        ser::SerializeSeq::end(self)
+    }
 }
 
 pub struct TupleVariantSerializer {
@@ -394,26 +428,42 @@ impl ser::SerializeMap for MapSerializer {
     fn serialize_key<T: serde::Serialize + ?Sized>(&mut self, key: &T) -> Result<()> {
         let k = match key.serialize(ConfigValueSerializer)? {
             ConfigValue::String(s) => s,
-            other => return Err(ser::Error::custom(format!("map key must be a string, got {other:?}"))),
+            other => {
+                return Err(ser::Error::custom(format!(
+                    "map key must be a string, got {other:?}"
+                )));
+            }
         };
         self.pending_key = Some(k);
         Ok(())
     }
     fn serialize_value<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<()> {
-        let k = self.pending_key.take().expect("serialize_value called after serialize_key");
+        let k = self
+            .pending_key
+            .take()
+            .expect("serialize_value called after serialize_key");
         self.map.insert(k, value.serialize(ConfigValueSerializer)?);
         Ok(())
     }
-    fn end(self) -> Result<ConfigValue> { Ok(ConfigValue::Table(self.map)) }
+    fn end(self) -> Result<ConfigValue> {
+        Ok(ConfigValue::Table(self.map))
+    }
 }
 impl ser::SerializeStruct for MapSerializer {
     type Ok = ConfigValue;
     type Error = DeserializeError;
-    fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, key: &'static str, value: &T) -> Result<()> {
-        self.map.insert(key.to_owned(), value.serialize(ConfigValueSerializer)?);
+    fn serialize_field<T: serde::Serialize + ?Sized>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<()> {
+        self.map
+            .insert(key.to_owned(), value.serialize(ConfigValueSerializer)?);
         Ok(())
     }
-    fn end(self) -> Result<ConfigValue> { Ok(ConfigValue::Table(self.map)) }
+    fn end(self) -> Result<ConfigValue> {
+        Ok(ConfigValue::Table(self.map))
+    }
 }
 
 pub struct StructVariantSerializer {
@@ -423,8 +473,13 @@ pub struct StructVariantSerializer {
 impl ser::SerializeStructVariant for StructVariantSerializer {
     type Ok = ConfigValue;
     type Error = DeserializeError;
-    fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, key: &'static str, value: &T) -> Result<()> {
-        self.fields.insert(key.to_owned(), value.serialize(ConfigValueSerializer)?);
+    fn serialize_field<T: serde::Serialize + ?Sized>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<()> {
+        self.fields
+            .insert(key.to_owned(), value.serialize(ConfigValueSerializer)?);
         Ok(())
     }
     fn end(self) -> Result<ConfigValue> {
