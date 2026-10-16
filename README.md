@@ -140,6 +140,33 @@ let config = ConfigLoader::<Config>::default()
 
 Fields listed in `ConfigSchema::encrypted_fields()` are decrypted transparently on load.
 
+## Key providers
+
+Pick one depending on the trust boundary and whether the machine is headed (desktop/laptop with a keyring) or headless (server/CI).
+
+| Provider | Feature | Platform | Storage |
+|---|---|---|---|
+| `FileKeyProvider` | (default) | all | `0600` file (random 32 bytes) |
+| `SecretServiceKeyring` | `native-keyring` | Linux | freedesktop.org Secret Service (gnome-keyring, kwallet, keepassxc-secret-service) over D-Bus |
+| `MacOsKeychain` | `native-keyring` | macOS | login Keychain via `security-framework` |
+| `WindowsCredentialManager` | `native-keyring` | Windows | Credential Manager (`CRED_PERSIST_LOCAL_MACHINE`, built on DPAPI) |
+| `SealedFileKeyProvider<PassphraseUnsealer>` | `sealed-key` | all | passphrase-sealed blob (Argon2id → AES-256-GCM) |
+
+`NativeKeyring` is a cross-platform type alias that resolves to the right provider for the current target (`SecretServiceKeyring` on Linux, `MacOsKeychain` on macOS, `WindowsCredentialManager` on Windows). Use it when you want one call site that works everywhere.
+
+### Trust boundary — know what `FileKeyProvider` does NOT protect
+
+`FileKeyProvider` is a **baseline against other local users** on the same machine (the `0600` permission bits), not a defence against a compromise of your own session. The key lives in the same `$HOME` as the data it decrypts, so any process running as your user can read both. For genuinely sensitive secrets (session tokens, API keys, credentials you would not want in a stolen disk image), use `native-keyring` on desktops or `sealed-key` with a user-supplied passphrase on headless hosts.
+
+### Divergence from the original design
+
+The native providers landed in forms that differ from the initial plan:
+
+- **Linux** uses the Secret Service D-Bus API, not the kernel keyring (`keyutils`). Kernel keys die with the session and need PAM integration; Secret Service survives logout and is already running on every mainstream desktop.
+- **Windows** uses Credential Manager, not raw DPAPI. Credential Manager is built on DPAPI and gives named storage out of the box.
+- **macOS** was added after the initial plan.
+- `sealed-key` was added as the headless fallback — no keyring daemon, user supplies a passphrase (optionally via `PassphraseUnsealer::from_env`).
+
 ## Runtime writes
 
 ```rust
