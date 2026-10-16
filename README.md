@@ -32,6 +32,7 @@ Both share the same `#[derive(ConfigSchema)]`, `ConfigValue` tree, and migration
 | `async` | Async source trait + `AsyncConfigLoader` |
 | `native-keyring` | OS keyring key provider (Linux Secret Service, macOS Keychain, Windows Credential Manager) |
 | `sealed-key` | Passphrase-sealed key blob (Argon2id + AES-256-GCM) |
+| `istmo` | Delegate path resolution to `istmo-core` (adds Android/iOS targets) |
 
 Default features: `toml`, `redb-backend`, `hot-reload`.
 
@@ -250,6 +251,19 @@ let provider = SealedFileKeyProvider::new(
 See the `sealed_key` example for a full flow.
 
 ---
+
+## Mobile targets (`istmo` feature)
+
+Enable the `istmo` feature to delegate path resolution to [`istmo-core`](https://docs.rs/istmo-core), which adds Android (`Context.filesDir`, `cacheDir`) and iOS (`NSFileManager`) on top of the three desktop OSes confex covers natively.
+
+```toml
+[dependencies]
+confex = { version = "0.1", features = ["istmo"] }
+```
+
+In this mode `app_config_dir` / `app_data_dir` ignore their `app_name` argument — istmo already resolved the app identity at build time from `ISTMO_APP_BUNDLE_ID` (baked by `istmo-build::emit_app`). Two extra helpers show up: `app_cache_dir` and `app_state_dir`. Everything else — merge, hot-reload, redb, encryption — works unchanged.
+
+On Android, make sure the istmo transport has called `istmo_core::path::install(...)` before confex touches any path (it does so automatically in a normal `istmo::runtime!` setup).
 
 ## Key providers
 

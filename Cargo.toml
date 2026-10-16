@@ -31,6 +31,7 @@ sealed-key = ["confex-core/sealed-key"]
 async = ["confex-core/async"]
 json = ["confex-core/json"]
 toml = ["confex-core/toml"]
+istmo = ["confex-core/istmo"]
 
 [dependencies]
 confex-core = { path = "confex-core", version = "0.1" }
