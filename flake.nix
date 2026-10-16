@@ -20,9 +20,6 @@
           packages = [
             toolchain
             pkgs.pkg-config
-            # sqlite headers — rusqlite "bundled" compiles its own amalgamation,
-            # but system sqlite is available for non-bundled use and tooling.
-            pkgs.sqlite
             pkgs.cargo-watch
           ];
         };

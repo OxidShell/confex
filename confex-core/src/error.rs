@@ -14,8 +14,8 @@ pub enum SourceError {
     Env(String),
     Crypto(CryptoError),
     Backend(String),
-    #[cfg(feature = "sqlite-backend")]
-    Sqlite(rusqlite::Error),
+    #[cfg(feature = "redb-backend")]
+    Redb(redb::Error),
 }
 
 impl fmt::Display for SourceError {
@@ -31,8 +31,8 @@ impl fmt::Display for SourceError {
             Self::Env(msg) => write!(f, "environment variable error: {msg}"),
             Self::Crypto(e) => write!(f, "crypto error: {e}"),
             Self::Backend(msg) => write!(f, "backend error: {msg}"),
-            #[cfg(feature = "sqlite-backend")]
-            Self::Sqlite(e) => write!(f, "SQLite error: {e}"),
+            #[cfg(feature = "redb-backend")]
+            Self::Redb(e) => write!(f, "redb error: {e}"),
         }
     }
 }
@@ -42,8 +42,8 @@ impl std::error::Error for SourceError {
         match self {
             Self::Io { source, .. } => Some(source),
             Self::Crypto(e) => Some(e),
-            #[cfg(feature = "sqlite-backend")]
-            Self::Sqlite(e) => Some(e),
+            #[cfg(feature = "redb-backend")]
+            Self::Redb(e) => Some(e),
             _ => None,
         }
     }
@@ -55,10 +55,39 @@ impl From<CryptoError> for SourceError {
     }
 }
 
-#[cfg(feature = "sqlite-backend")]
-impl From<rusqlite::Error> for SourceError {
-    fn from(e: rusqlite::Error) -> Self {
-        Self::Sqlite(e)
+#[cfg(feature = "redb-backend")]
+mod redb_err {
+    use super::SourceError;
+
+    impl From<redb::Error> for SourceError {
+        fn from(e: redb::Error) -> Self {
+            Self::Redb(e)
+        }
+    }
+    impl From<redb::DatabaseError> for SourceError {
+        fn from(e: redb::DatabaseError) -> Self {
+            Self::Redb(e.into())
+        }
+    }
+    impl From<redb::TransactionError> for SourceError {
+        fn from(e: redb::TransactionError) -> Self {
+            Self::Redb(e.into())
+        }
+    }
+    impl From<redb::TableError> for SourceError {
+        fn from(e: redb::TableError) -> Self {
+            Self::Redb(e.into())
+        }
+    }
+    impl From<redb::StorageError> for SourceError {
+        fn from(e: redb::StorageError) -> Self {
+            Self::Redb(e.into())
+        }
+    }
+    impl From<redb::CommitError> for SourceError {
+        fn from(e: redb::CommitError) -> Self {
+            Self::Redb(e.into())
+        }
     }
 }
 

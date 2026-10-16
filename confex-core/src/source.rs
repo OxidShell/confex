@@ -18,7 +18,7 @@ pub trait Source {
     /// Called automatically by [`crate::config::ConfigLoader::with_source`] and
     /// [`crate::config::ConfigLoader::with_watched_source`] before the source is
     /// stored. The default is a no-op; override it for sources that use the app
-    /// name to scope their data (e.g. `SqliteSource`, `EnvSource`). The name
+    /// name to scope their data (e.g. `RedbSource`, `EnvSource`). The name
     /// must not override an explicit value already set on the source.
     #[must_use]
     fn with_app_name(self, _name: &str) -> Self

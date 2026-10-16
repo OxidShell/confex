@@ -34,8 +34,8 @@ pub use confex_core::value::ConfigValue;
 #[cfg(feature = "macros")]
 pub use confex_macros::ConfigSchema;
 
-#[cfg(feature = "sqlite-backend")]
-pub use confex_core::sqlite::{SqliteSource, SqliteStore};
+#[cfg(feature = "redb-backend")]
+pub use confex_core::redb::{RedbSource, RedbStore};
 
 #[cfg(feature = "hot-reload")]
 pub use confex_core::handle::WatcherHandle;

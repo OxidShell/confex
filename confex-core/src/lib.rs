@@ -12,7 +12,7 @@ pub mod key;
 pub mod merge;
 pub mod migrate;
 pub mod paths;
+#[cfg(feature = "redb-backend")]
+pub mod redb;
 pub mod source;
-#[cfg(feature = "sqlite-backend")]
-pub mod sqlite;
 pub mod value;

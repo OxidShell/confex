@@ -1,7 +1,7 @@
 /// Compact, self-describing codec for [`crate::value::ConfigValue`].
 ///
 /// No external crates. Format is length-prefixed so it is binary-safe for
-/// strings. Used by the `SQLite` backend to avoid a `serde_json` dependency.
+/// strings. Used by the redb backend to avoid a `serde_json` dependency.
 ///
 /// Grammar (all counts/lengths are decimal digits terminated by a delimiter):
 /// ```text

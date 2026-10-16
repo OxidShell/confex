@@ -1,6 +1,6 @@
 # confex
 
-Layered configuration library for Rust. Merges multiple sources (files, env vars, CLI args, SQLite) into a single typed struct, with optional hot-reload that only re-reads what changed.
+Layered configuration library for Rust. Merges multiple sources (files, env vars, CLI args, redb key-value store) into a single typed struct, with optional hot-reload that only re-reads what changed.
 
 ## Problem
 
@@ -9,7 +9,7 @@ Most config libraries either:
 - Reload the entire pipeline on every file event (re-reading env vars, re-parsing CLI args, etc.)
 - Don't compose sources with different priorities
 
-confex merges sources in priority order, runs schema migrations on stale data, and on change only re-collects the source that actually changed — env overrides stay fixed, the file or SQLite store gets re-read.
+confex merges sources in priority order, runs schema migrations on stale data, and on change only re-collects the source that actually changed — env overrides stay fixed, the file or redb store gets re-read.
 
 ## Features
 
@@ -17,13 +17,13 @@ confex merges sources in priority order, runs schema migrations on stale data, a
 |---|---|
 | `toml` | TOML file source |
 | `json` | JSON file source |
-| `sqlite-backend` | SQLite key-value store source |
+| `redb-backend` | redb-backed dconf-like key-value store source (pure Rust, multi-process via `experimental-multiprocess`) |
 | `hot-reload` | Live config handle with selective per-source file watcher |
 | `async` | Async source trait + `AsyncConfigLoader` |
 | `native-keyring` | OS keyring key provider (Linux Secret Service, macOS Keychain, Windows Credential Manager) |
 | `sealed-key` | Passphrase-sealed key blob (Argon2id + AES-256-GCM) |
 
-Default features: `toml`, `sqlite-backend`, `hot-reload`.
+Default features: `toml`, `redb-backend`, `hot-reload`.
 
 ## Quick start
 
@@ -52,7 +52,7 @@ let config = ConfigLoader::<Config>::default()
 
 Sources merge in registration order — last writer wins. `EnvSource` registered after `FileSource` overrides it.
 
-The `app_name` defined in `#[config(...)]` is automatically injected into sources that need it — `EnvSource` derives its prefix from it, `SqliteSource` uses it to scope the key-value store. Pass an explicit `EnvSource::from("CUSTOM")` to override the prefix.
+The `app_name` defined in `#[config(...)]` is automatically injected into sources that need it — `EnvSource` derives its prefix from it, `RedbSource` uses it to scope the key-value store. Pass an explicit `EnvSource::from("CUSTOM")` to override the prefix.
 
 ## Hot-reload
 
@@ -74,28 +74,30 @@ println!("{}", handle.read().host);
 
 If the merged result after re-collection is identical to the previous one (e.g. your own process wrote to the file), the in-memory swap is skipped.
 
-## SQLite backend
+## redb backend
+
+A dconf-like key-value store backed by [redb](https://crates.io/crates/redb) in `MultiWriter` concurrency mode. Pure Rust, no C deps, safe for concurrent access from multiple independent OS processes.
 
 ```rust
-use confex::{SqliteSource, SqliteStore, ConfigValue};
+use confex::{RedbSource, RedbStore, ConfigValue};
 
-// SqliteStore needs an explicit name for direct write access.
-let store = SqliteStore::new("prefs.db", Prefs::APP_NAME);
+// RedbStore needs an explicit name for direct write access.
+let store = RedbStore::new("prefs.redb", Prefs::APP_NAME);
 store.set("theme", &ConfigValue::String("dark".into()))?;
 
 // One-shot — app_name injected automatically from the schema type.
 let config = ConfigLoader::<Prefs>::default()
-    .with_source(SqliteSource::new("prefs.db"))
+    .with_source(RedbSource::new("prefs.redb"))
     .load()?;
 
 // Live, reacts to writes from other processes.
 let (handle, _watcher) = ConfigLoader::<Prefs>::default()
-    .with_watched_source(SqliteSource::new("prefs.db"))
+    .with_watched_source(RedbSource::new("prefs.redb"))
     .with_source(EnvSource::default())
     .watch_auto(WatchOptions::default())?;
 ```
 
-The watcher monitors the directory (not the file) so WAL writes from other processes are picked up immediately without waiting for a checkpoint.
+The watcher monitors the containing directory so cross-process writes are picked up immediately. Multi-process support rides on the `experimental-multiprocess` feature of redb (file byte-range locks); as such it is **not reliable on network filesystems** (NFS/SMB) — use a local path.
 
 ## Schema migrations
 
@@ -152,7 +154,7 @@ let handle = ConfigHandle::from(config);
 
 ```
 cargo run --example hot_reload --features hot-reload
-cargo run --example sqlite_store --features sqlite-backend
+cargo run --example redb_store --features redb-backend
 cargo run --example multi_source -- --port 9090
 cargo run --example migration
 cargo run --example encryption

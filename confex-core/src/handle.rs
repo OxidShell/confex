@@ -193,7 +193,7 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
         Self::spawn_watcher(initial, path, &reload, write_back, options.debounce)
     }
 
-    /// Shared watcher setup used by both file-backed and `SQLite`-backed watch modes.
+    /// Shared watcher setup used by both file-backed and redb-backed watch modes.
     pub(crate) fn spawn_watcher(
         initial: T,
         watch_path: &std::path::Path,

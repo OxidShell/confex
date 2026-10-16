@@ -16,16 +16,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Layered config library - merges files, env vars, CLI, and SQLite into a typed struct with selective per-source hot-reload"
-keywords = ["config", "configuration", "hot-reload", "toml", "sqlite"]
+description = "Layered config library - merges files, env vars, CLI, and a redb-backed dconf-like store into a typed struct with selective per-source hot-reload"
+keywords = ["config", "configuration", "hot-reload", "toml", "redb"]
 categories = ["config", "filesystem"]
 readme = "README.md"
 
 [features]
-default = ["macros", "sqlite-backend", "bundled-sqlite", "hot-reload", "toml"]
+default = ["macros", "redb-backend", "hot-reload", "toml"]
 macros = ["dep:confex-macros"]
-sqlite-backend = ["confex-core/sqlite-backend"]
-bundled-sqlite = ["confex-core/bundled-sqlite"]
+redb-backend = ["confex-core/redb-backend"]
 hot-reload = ["confex-core/hot-reload"]
 native-keyring = ["confex-core/native-keyring"]
 sealed-key = ["confex-core/sealed-key"]

@@ -1,53 +1,45 @@
-// Product names (SQLite, WAL) are not Rust identifiers; suppress doc_markdown for this module.
 #![allow(clippy::doc_markdown)]
 
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    time::Duration,
 };
 
-use rusqlite::{Connection, params};
+use redb::{
+    Builder, ConcurrencyMode, Database, ReadableDatabase as _, ReadableTable as _, ReadableTableMetadata as _,
+    TableDefinition,
+};
 
 use crate::{codec, error::SourceError, source::Source, value::ConfigValue};
 
-fn open_wal(path: &Path) -> Result<Connection, rusqlite::Error> {
-    let conn = Connection::open(path)?;
-    conn.busy_timeout(Duration::from_secs(5))?;
-    conn.pragma_update(None, "journal_mode", "WAL")?;
-    conn.pragma_update(None, "synchronous", "NORMAL")?;
-    Ok(conn)
+const KV: TableDefinition<(&str, &str), &str> = TableDefinition::new("confex_kv");
+
+fn open_db(path: &Path) -> Result<Database, redb::DatabaseError> {
+    let mut b = Builder::new();
+    b.set_concurrency_mode(ConcurrencyMode::MultiWriter);
+    b.create(path)
 }
 
-fn ensure_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS kv (
-            app_name TEXT NOT NULL,
-            key      TEXT NOT NULL,
-            value    TEXT NOT NULL,
-            PRIMARY KEY (app_name, key)
-        );",
-    )
-}
-
-/// Config source backed by a `SQLite` database in WAL mode.
+/// Config source backed by a redb database in multi-writer mode.
 ///
 /// Keys use dot notation for nesting: `"window.width"` expands to
-/// `{ "window": { "width": … } }`. Values are JSON-encoded `ConfigValue`s.
+/// `{ "window": { "width": … } }`. Values are codec-encoded `ConfigValue`s.
 ///
-/// Safe for concurrent access from multiple processes; WAL handles the isolation.
+/// Safe for concurrent access from multiple processes; redb's multi-writer
+/// concurrency mode handles isolation via file byte-range locks. Requires the
+/// `experimental-multiprocess` feature on the `redb` crate (enabled by default).
 ///
 /// The `app_name` scope is injected automatically when the source is added to a
 /// [`crate::config::ConfigLoader`] via `with_source` or `with_watched_source`.
 /// When using `watch` directly (without `ConfigLoader`), the app name is inferred
 /// from the schema type's `APP_NAME` constant.
 #[derive(Clone)]
-pub struct SqliteSource {
+pub struct RedbSource {
     db_path: PathBuf,
     app_name: Option<String>,
 }
 
-impl SqliteSource {
+impl RedbSource {
     /// Create a source pointing at `db_path`.
     ///
     /// The `app_name` scope is filled in automatically by `ConfigLoader` or inferred
@@ -67,27 +59,26 @@ impl SqliteSource {
     /// Valid only after the source has been given an app name (via `ConfigLoader`
     /// or an explicit `Source::with_app_name` call).
     #[must_use]
-    pub fn store(&self) -> SqliteStore {
-        SqliteStore {
+    pub fn store(&self) -> RedbStore {
+        RedbStore {
             db_path: self.db_path.clone(),
             app_name: self.app_name.clone().unwrap_or_default(),
         }
     }
 }
 
-/// Hot-reload support for `SQLite`-backed config.
+/// Hot-reload support for redb-backed config.
 ///
-/// Watches the directory containing the database file so that WAL writes from
-/// other processes are detected without waiting for a checkpoint.
+/// Watches the directory containing the database file so that writes from
+/// other processes are detected without polling.
 #[cfg(feature = "hot-reload")]
-impl SqliteSource {
+impl RedbSource {
     /// Watch this database for changes and reload automatically.
     ///
     /// Loads the initial config from the database, then watches the containing
-    /// directory so WAL writes from other processes trigger a reload without
-    /// waiting for a checkpoint.
+    /// directory so cross-process writes trigger a reload.
     ///
-    /// Writes should go through [`SqliteStore`]; [`crate::handle::WriteGuard`]
+    /// Writes should go through [`RedbStore`]; [`crate::handle::WriteGuard`]
     /// has no write-back path in this mode.
     ///
     /// # Errors
@@ -143,13 +134,13 @@ impl SqliteSource {
 }
 
 #[cfg(feature = "hot-reload")]
-impl crate::source::WatchableSource for SqliteSource {
+impl crate::source::WatchableSource for RedbSource {
     fn watch_paths(&self) -> Vec<std::path::PathBuf> {
         vec![self.db_path.parent().unwrap_or(&self.db_path).to_path_buf()]
     }
 }
 
-impl Source for SqliteSource {
+impl Source for RedbSource {
     fn with_app_name(mut self, name: &str) -> Self {
         if self.app_name.is_none() {
             self.app_name = Some(name.to_owned());
@@ -167,32 +158,41 @@ impl Source for SqliteSource {
             return Ok(ConfigValue::Table(BTreeMap::new()));
         }
 
-        let conn = open_wal(&self.db_path)?;
-        ensure_schema(&conn)?;
+        let db = open_db(&self.db_path)?;
+        let txn = db.begin_read()?;
+        let table = match txn.open_table(KV) {
+            Ok(t) => t,
+            Err(redb::TableError::TableDoesNotExist(_)) => {
+                return Ok(ConfigValue::Table(BTreeMap::new()));
+            }
+            Err(e) => return Err(e.into()),
+        };
 
-        let mut stmt =
-            conn.prepare("SELECT key, value FROM kv WHERE app_name = ?1 ORDER BY key")?;
-
-        let pairs: Vec<(String, String)> = stmt
-            .query_map(params![app_name], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<rusqlite::Result<_>>()?;
-
-        let mut table: BTreeMap<String, ConfigValue> = BTreeMap::new();
-        for (key, encoded) in pairs {
-            insert_dot_path(&mut table, &key, codec::decode(&encoded)?);
+        let mut out: BTreeMap<String, ConfigValue> = BTreeMap::new();
+        if table.is_empty()? {
+            return Ok(ConfigValue::Table(out));
         }
-
-        Ok(ConfigValue::Table(table))
+        let start: (&str, &str) = (app_name, "");
+        let iter = table.range(start..)?;
+        for entry in iter {
+            let (k_guard, v_guard) = entry?;
+            let (a, key) = k_guard.value();
+            if a != app_name {
+                break;
+            }
+            insert_dot_path(&mut out, key, codec::decode(v_guard.value())?);
+        }
+        Ok(ConfigValue::Table(out))
     }
 }
 
-/// Write handle for inserting or updating values in the SQLite store.
-pub struct SqliteStore {
+/// Write handle for inserting or updating values in the redb store.
+pub struct RedbStore {
     db_path: PathBuf,
     app_name: String,
 }
 
-impl SqliteStore {
+impl RedbStore {
     /// Create a write handle pointing at `db_path` scoped to `app_name`.
     #[must_use]
     pub fn new(db_path: impl Into<PathBuf>, app_name: impl Into<String>) -> Self {
@@ -202,11 +202,11 @@ impl SqliteStore {
         }
     }
 
-    /// Upsert `key` with JSON-encoded `value`.
+    /// Upsert `key` with codec-encoded `value`.
     ///
     /// # Errors
-    /// Returns [`SourceError::Sqlite`] on SQLite failure, [`SourceError::Backend`] on
-    /// Returns [`SourceError::Sqlite`] on SQLite failure.
+    /// Returns [`SourceError::Redb`] on redb failure, [`SourceError::Io`] if the
+    /// parent directory cannot be created.
     pub fn set(&self, key: &str, value: &ConfigValue) -> Result<(), SourceError> {
         let encoded = codec::encode(value);
         if let Some(parent) = self.db_path.parent() {
@@ -215,52 +215,56 @@ impl SqliteStore {
                 source: e,
             })?;
         }
-        let conn = open_wal(&self.db_path)?;
-        ensure_schema(&conn)?;
-        conn.execute(
-            "INSERT OR REPLACE INTO kv (app_name, key, value) VALUES (?1, ?2, ?3)",
-            params![self.app_name, key, encoded],
-        )?;
+        let db = open_db(&self.db_path)?;
+        let txn = db.begin_write()?;
+        {
+            let mut table = txn.open_table(KV)?;
+            table.insert((self.app_name.as_str(), key), encoded.as_str())?;
+        }
+        txn.commit()?;
         Ok(())
     }
 
     /// Read a single key's value, or `None` if absent.
     ///
     /// # Errors
-    /// Returns [`SourceError::Sqlite`] on SQLite failure.
+    /// Returns [`SourceError::Redb`] on redb failure.
     pub fn get(&self, key: &str) -> Result<Option<ConfigValue>, SourceError> {
         if !self.db_path.exists() {
             return Ok(None);
         }
-        let conn = open_wal(&self.db_path)?;
-        let result: Option<String> = match conn.query_row(
-            "SELECT value FROM kv WHERE app_name = ?1 AND key = ?2",
-            params![self.app_name, key],
-            |row| row.get(0),
-        ) {
-            Ok(v) => Some(v),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        let db = open_db(&self.db_path)?;
+        let txn = db.begin_read()?;
+        let table = match txn.open_table(KV) {
+            Ok(t) => t,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(None),
             Err(e) => return Err(e.into()),
         };
-        match result {
+        match table.get((self.app_name.as_str(), key))? {
             None => Ok(None),
-            Some(encoded) => codec::decode(&encoded).map(Some),
+            Some(v) => Ok(Some(codec::decode(v.value())?)),
         }
     }
 
     /// Delete `key` from the store. No-op if absent.
     ///
     /// # Errors
-    /// Returns [`SourceError::Sqlite`] on SQLite failure.
+    /// Returns [`SourceError::Redb`] on redb failure.
     pub fn delete(&self, key: &str) -> Result<(), SourceError> {
         if !self.db_path.exists() {
             return Ok(());
         }
-        let conn = open_wal(&self.db_path)?;
-        conn.execute(
-            "DELETE FROM kv WHERE app_name = ?1 AND key = ?2",
-            params![self.app_name, key],
-        )?;
+        let db = open_db(&self.db_path)?;
+        let txn = db.begin_write()?;
+        {
+            let mut table = match txn.open_table(KV) {
+                Ok(t) => t,
+                Err(redb::TableError::TableDoesNotExist(_)) => return Ok(()),
+                Err(e) => return Err(e.into()),
+            };
+            table.remove((self.app_name.as_str(), key))?;
+        }
+        txn.commit()?;
         Ok(())
     }
 }
@@ -285,21 +289,20 @@ fn insert_dot_path(table: &mut BTreeMap<String, ConfigValue>, key: &str, value: 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::Source as _;
     use std::sync::Arc;
 
     #[test]
     fn set_and_collect_flat_keys() {
         let dir = tempfile::tempdir().unwrap();
-        let db = dir.path().join("test.db");
-        let store = SqliteStore::new(&db, "myapp");
+        let db = dir.path().join("test.redb");
+        let store = RedbStore::new(&db, "myapp");
 
         store.set("port", &ConfigValue::Integer(8080)).unwrap();
         store
             .set("host", &ConfigValue::String("localhost".into()))
             .unwrap();
 
-        let source = SqliteSource::new(&db).with_app_name("myapp");
+        let source = RedbSource::new(&db).with_app_name("myapp");
         let config = source.collect().unwrap();
         let table = config.as_table().unwrap();
 
@@ -310,8 +313,8 @@ mod tests {
     #[test]
     fn dot_notation_expands_to_nested_tables() {
         let dir = tempfile::tempdir().unwrap();
-        let db = dir.path().join("test.db");
-        let store = SqliteStore::new(&db, "myapp");
+        let db = dir.path().join("test.redb");
+        let store = RedbStore::new(&db, "myapp");
 
         store
             .set("window.width", &ConfigValue::Integer(1920))
@@ -321,7 +324,7 @@ mod tests {
             .unwrap();
         store.set("port", &ConfigValue::Integer(3000)).unwrap();
 
-        let source = SqliteSource::new(&db).with_app_name("myapp");
+        let source = RedbSource::new(&db).with_app_name("myapp");
         let table = source.collect().unwrap();
         let table = table.as_table().unwrap();
 
@@ -334,8 +337,8 @@ mod tests {
     #[test]
     fn get_returns_none_for_missing_key() {
         let dir = tempfile::tempdir().unwrap();
-        let db = dir.path().join("test.db");
-        let store = SqliteStore::new(&db, "myapp");
+        let db = dir.path().join("test.redb");
+        let store = RedbStore::new(&db, "myapp");
         store.set("a", &ConfigValue::Integer(1)).unwrap();
 
         assert!(store.get("missing").unwrap().is_none());
@@ -345,12 +348,12 @@ mod tests {
     #[test]
     fn delete_removes_key() {
         let dir = tempfile::tempdir().unwrap();
-        let db = dir.path().join("test.db");
-        let store = SqliteStore::new(&db, "myapp");
+        let db = dir.path().join("test.redb");
+        let store = RedbStore::new(&db, "myapp");
         store.set("key", &ConfigValue::Integer(42)).unwrap();
         store.delete("key").unwrap();
 
-        let source = SqliteSource::new(&db).with_app_name("myapp");
+        let source = RedbSource::new(&db).with_app_name("myapp");
         let table = source.collect().unwrap();
         assert!(table.as_table().unwrap().is_empty());
     }
@@ -358,20 +361,20 @@ mod tests {
     #[test]
     fn app_name_isolation() {
         let dir = tempfile::tempdir().unwrap();
-        let db = dir.path().join("test.db");
+        let db = dir.path().join("test.redb");
 
-        SqliteStore::new(&db, "app_a")
+        RedbStore::new(&db, "app_a")
             .set("val", &ConfigValue::Integer(1))
             .unwrap();
-        SqliteStore::new(&db, "app_b")
+        RedbStore::new(&db, "app_b")
             .set("val", &ConfigValue::Integer(2))
             .unwrap();
 
-        let a = SqliteSource::new(&db)
+        let a = RedbSource::new(&db)
             .with_app_name("app_a")
             .collect()
             .unwrap();
-        let b = SqliteSource::new(&db)
+        let b = RedbSource::new(&db)
             .with_app_name("app_b")
             .collect()
             .unwrap();
@@ -382,17 +385,17 @@ mod tests {
 
     /// Concurrent writes from 8 threads to the same database must not corrupt data.
     ///
-    /// This validates WAL-mode isolation: SQLite serializes writers while still
-    /// allowing readers to proceed without blocking.
+    /// Validates redb's multi-writer concurrency mode: writers serialize at the
+    /// transaction level while readers in other processes can follow commits.
     #[test]
     fn concurrent_writes_no_corruption() {
         const THREADS: i64 = 8;
         const OPS_PER_THREAD: i64 = 50;
 
         let dir = tempfile::tempdir().unwrap();
-        let db = Arc::new(dir.path().join("concurrent.db"));
+        let db = Arc::new(dir.path().join("concurrent.redb"));
 
-        SqliteStore::new(db.as_ref(), "myapp")
+        RedbStore::new(db.as_ref(), "myapp")
             .set("seed", &ConfigValue::Bool(true))
             .unwrap();
 
@@ -400,7 +403,7 @@ mod tests {
             .map(|t| {
                 let db = Arc::clone(&db);
                 std::thread::spawn(move || {
-                    let store = SqliteStore::new(db.as_ref(), "myapp");
+                    let store = RedbStore::new(db.as_ref(), "myapp");
                     for j in 0..OPS_PER_THREAD {
                         store
                             .set(&format!("t{t}_k{j}"), &ConfigValue::Integer(t * 1000 + j))
@@ -414,11 +417,10 @@ mod tests {
             h.join().expect("writer thread panicked");
         }
 
-        let source = SqliteSource::new(db.as_ref()).with_app_name("myapp");
+        let source = RedbSource::new(db.as_ref()).with_app_name("myapp");
         let table = source.collect().unwrap();
         let table = table.as_table().unwrap();
 
-        // 1 seed + THREADS * OPS_PER_THREAD entries
         let expected = usize::try_from(1 + THREADS * OPS_PER_THREAD).unwrap();
         assert_eq!(table.len(), expected);
 
@@ -436,7 +438,7 @@ mod tests {
 
     #[cfg(feature = "hot-reload")]
     #[test]
-    fn sqlite_watch_detects_cross_process_write() {
+    fn redb_watch_detects_cross_process_write() {
         use crate::{config::ConfigSchema, handle::WatchOptions, merge::FieldStrategies};
         use serde::{Deserialize, Serialize};
         use std::{thread, time::Duration};
@@ -457,17 +459,16 @@ mod tests {
         }
 
         let dir = tempfile::tempdir().unwrap();
-        let db = dir.path().join("watch.db");
+        let db = dir.path().join("watch.redb");
 
-        let store = SqliteStore::new(&db, "watch_test");
+        let store = RedbStore::new(&db, "watch_test");
         store.set("port", &ConfigValue::Integer(3000)).unwrap();
 
-        let source = SqliteSource::new(&db);
+        let source = RedbSource::new(&db);
         let (handle, _watcher) = source.watch::<Cfg>(WatchOptions::default()).unwrap();
 
         assert_eq!(handle.read().port, 3000);
 
-        // Simulate another process writing to the same DB.
         store.set("port", &ConfigValue::Integer(9090)).unwrap();
         thread::sleep(Duration::from_millis(600));
 
