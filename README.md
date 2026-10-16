@@ -11,6 +11,16 @@ Most config libraries either:
 
 confex merges sources in priority order, runs schema migrations on stale data, and on change only re-collects the source that actually changed — env overrides stay fixed, the file or redb store gets re-read.
 
+## Two use cases
+
+confex covers two shapes of persistent state. Pick the shape before you pick an API:
+
+**A. Layered config (merge + hot-reload).** User-facing settings that come from several places and need to be composed: TOML/JSON files, env vars, CLI args, optionally a dconf-like key-value store for admin overrides. Multiple sources, one typed struct, hot-reload if you want it. Field-level encryption for the one or two secret fields in the mix. → [Layered config](#layered-config)
+
+**B. App data (single source of truth).** State the application owns and writes to itself: session tokens, cached auth, "recent files" lists, window geometry. One backing store, no merging, usually opaque on disk. Written by the app, not hand-edited. → [App data](#app-data)
+
+Both share the same `#[derive(ConfigSchema)]`, `ConfigValue` tree, and migration machinery. The difference is which sources you register and whether you reach for `EncryptedFormat<F>` (whole-file crypto) or `#[config(encrypted)]` (per-field crypto inside a merged struct).
+
 ## Features
 
 | Feature | Description |
@@ -25,13 +35,19 @@ confex merges sources in priority order, runs schema migrations on stale data, a
 
 Default features: `toml`, `redb-backend`, `hot-reload`.
 
-## Quick start
-
 ```toml
 [dependencies]
 confex = "0.1"
 serde = { version = "1", features = ["derive"] }
 ```
+
+---
+
+# Layered config
+
+User-editable settings merged from multiple sources into one typed struct.
+
+## Quick start
 
 ```rust
 use confex::{ConfigLoader, ConfigSchema, EnvSource, FileSource, TomlFormat};
@@ -74,30 +90,27 @@ println!("{}", handle.read().host);
 
 If the merged result after re-collection is identical to the previous one (e.g. your own process wrote to the file), the in-memory swap is skipped.
 
-## redb backend
+## redb-backed override
 
-A dconf-like key-value store backed by [redb](https://crates.io/crates/redb) in `MultiWriter` concurrency mode. Pure Rust, no C deps, safe for concurrent access from multiple independent OS processes.
+A dconf-like key-value store slotted into the merge chain, typically between file and env. Pure Rust, no C deps, safe across OS processes.
 
 ```rust
 use confex::{RedbSource, RedbStore, ConfigValue};
 
-// RedbStore needs an explicit name for direct write access.
-let store = RedbStore::new("prefs.redb", Prefs::APP_NAME);
-store.set("theme", &ConfigValue::String("dark".into()))?;
+// Admin writes an override directly to the store.
+RedbStore::new("overrides.redb", Config::APP_NAME)
+    .set("host", &ConfigValue::String("0.0.0.0".into()))?;
 
-// One-shot — app_name injected automatically from the schema type.
-let config = ConfigLoader::<Prefs>::default()
-    .with_source(RedbSource::new("prefs.redb"))
+let config = ConfigLoader::<Config>::default()
+    .with_source(FileSource::new(["config.toml".into()], TomlFormat))
+    .with_source(RedbSource::new("overrides.redb"))   // overrides the file
+    .with_source(EnvSource::default())                // overrides the store
     .load()?;
-
-// Live, reacts to writes from other processes.
-let (handle, _watcher) = ConfigLoader::<Prefs>::default()
-    .with_watched_source(RedbSource::new("prefs.redb"))
-    .with_source(EnvSource::default())
-    .watch_auto(WatchOptions::default())?;
 ```
 
-The watcher monitors the containing directory so cross-process writes are picked up immediately. Multi-process support rides on the `experimental-multiprocess` feature of redb (file byte-range locks); as such it is **not reliable on network filesystems** (NFS/SMB) — use a local path.
+With `hot-reload` enabled, use `with_watched_source(RedbSource::new(...))` to react to writes from other processes without polling. The watcher monitors the containing directory, so cross-process writes land immediately.
+
+Multi-process support rides on redb's `experimental-multiprocess` feature (file byte-range locks) — **not reliable on network filesystems** (NFS/SMB). Use a local path.
 
 ## Schema migrations
 
@@ -122,23 +135,121 @@ let config = ConfigLoader::<ChatConfig>::default()
 
 Migrations run automatically when the stored `__schema_version` is below `SCHEMA_VERSION`.
 
-## Encryption at rest
+## Field-level encryption
+
+Use when the config is mostly plaintext but a couple of fields are secret (API token, OAuth refresh token). The file stays human-readable; only the marked fields are ciphertext.
 
 ```rust
-use confex::{Aes256GcmEncryptor, FileKeyProvider};
+#[derive(Debug, Clone, Serialize, Deserialize, ConfigSchema)]
+#[config(app_name = "vault", version = 1)]
+struct VaultConfig {
+    endpoint: String,
+    #[config(encrypted)]
+    token: String,
+    #[config(encrypted)]
+    secret: String,
+}
+
+use confex::{Aes256GcmEncryptor, FileKeyProvider, KeyProvider};
 use std::path::PathBuf;
 
 let key_provider = FileKeyProvider::from(PathBuf::from(".key"));
-let key = key_provider.key("myapp")?;
+let key = key_provider.key("vault")?;
 let enc = Aes256GcmEncryptor::from(&key);
 
-let config = ConfigLoader::<Config>::default()
-    .with_source(FileSource::new(["config.toml".into()], TomlFormat))
+let config = ConfigLoader::<VaultConfig>::default()
+    .with_source(FileSource::new(["vault.toml".into()], TomlFormat))
     .with_encryptor(enc)
     .load()?;
 ```
 
-Fields listed in `ConfigSchema::encrypted_fields()` are decrypted transparently on load.
+Fields listed in `ConfigSchema::encrypted_fields()` (generated from `#[config(encrypted)]`) are decrypted transparently on load.
+
+For whole-file encryption instead of per-field, see [App data → encrypted file](#encrypted-file).
+
+## Runtime writes
+
+```rust
+let handle = ConfigHandle::from(config);
+{
+    let mut guard = handle.write();
+    guard.volume = 80;
+} // atomically swaps on drop, writes back to file
+```
+
+---
+
+# App data
+
+State the app owns. Single source, no merging, often opaque on disk. The app writes it; the user does not hand-edit it. Hot-reload is usually unnecessary here — the app knows when it changed something.
+
+## Encrypted file
+
+`EncryptedFormat<F>` wraps any `Format` so the whole serialized payload is encrypted at rest. The file is unreadable without the key. Default choice for session blobs, cached credentials, or anything that would be awkward lying around in plaintext.
+
+```rust
+use confex::{
+    Aes256GcmEncryptor, ConfigLoader, ConfigSchema, EncryptedFormat,
+    FileSource, KeyProvider, NativeKeyring, TomlFormat, app_data_dir,
+};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, ConfigSchema)]
+#[config(app_name = "myapp-session", version = 1)]
+struct Session {
+    user_id: String,
+    refresh_token: String,
+    expires_at: i64,
+}
+
+let key = NativeKeyring.key(Session::APP_NAME)?;
+let enc = Aes256GcmEncryptor::from(&key);
+let fmt = EncryptedFormat::new(TomlFormat, &enc);
+
+let path = app_data_dir(Session::APP_NAME).unwrap().join("session.enc");
+
+let session: Session = ConfigLoader::<Session>::default()
+    .with_source(FileSource::new([path].to_vec(), fmt))
+    .load()?;
+```
+
+Do **not** add `EnvSource` or CLI sources to an app-data loader — those are user-facing override channels and have no place in app-owned state.
+
+## redb-backed app data
+
+For state that changes incrementally (recent-files list, UI counters, per-key settings), reach for `RedbStore` directly. One `app_name` namespace in the shared `confex_kv` table; each `set` is an atomic redb transaction and safe across processes.
+
+```rust
+use confex::{RedbStore, ConfigValue, app_data_dir};
+
+let store = RedbStore::new(
+    app_data_dir("myapp").unwrap().join("state.redb"),
+    "myapp",
+);
+
+store.set("recent_files.0", &ConfigValue::String("/path/to/doc.md".into()))?;
+store.set("window.width", &ConfigValue::Integer(1920))?;
+```
+
+Not encrypted at rest. If the data is sensitive, use `EncryptedFormat` on a file instead, or wrap the values with field-level encryption before writing (same `Aes256GcmEncryptor::encrypt` → store a hex-encoded ciphertext).
+
+## Headless secrets (no desktop keyring)
+
+For servers or CI where no Secret Service / Keychain / Credential Manager is running, use `SealedFileKeyProvider` with `PassphraseUnsealer`. The key is sealed with a user-supplied passphrase via Argon2id + AES-256-GCM; nothing on disk is useful without the passphrase.
+
+```rust
+use confex::{PassphraseUnsealer, SealedFileKeyProvider};
+
+let unsealer = PassphraseUnsealer::from_env("MYAPP_PASSPHRASE")?;
+let provider = SealedFileKeyProvider::new(
+    app_data_dir("myapp").unwrap().join("key.sealed"),
+    unsealer,
+);
+```
+
+See the `sealed_key` example for a full flow.
+
+---
 
 ## Key providers
 
@@ -167,22 +278,24 @@ The native providers landed in forms that differ from the initial plan:
 - **macOS** was added after the initial plan.
 - `sealed-key` was added as the headless fallback — no keyring daemon, user supplies a passphrase (optionally via `PassphraseUnsealer::from_env`).
 
-## Runtime writes
-
-```rust
-let handle = ConfigHandle::from(config);
-{
-    let mut guard = handle.write();
-    guard.volume = 80;
-} // atomically swaps on drop, writes back to file
-```
-
 ## Examples
 
+Grouped by the use case they illustrate.
+
+**Layered config:**
+
 ```
-cargo run --example hot_reload --features hot-reload
-cargo run --example redb_store --features redb-backend
-cargo run --example multi_source -- --port 9090
-cargo run --example migration
-cargo run --example encryption
+cargo run --example file_toml                            # single-source TOML
+cargo run --example multi_source -- --port 9090          # file + env + CLI merge
+cargo run --example hot_reload --features hot-reload     # selective per-source reload
+cargo run --example migration                            # schema migration
+cargo run --example encryption                           # field-level #[config(encrypted)]
+cargo run --example redb_store --features redb-backend   # redb override in the merge chain
+cargo run --example write_guard                          # ConfigHandle.write() → file write-back
+```
+
+**App data:**
+
+```
+cargo run --example sealed_key --features sealed-key     # passphrase-sealed key for headless hosts
 ```
