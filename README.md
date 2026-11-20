@@ -27,7 +27,7 @@ Both share the same `#[derive(ConfigSchema)]`, `ConfigValue` tree, and migration
 |---|---|
 | `toml` | TOML file source |
 | `json` | JSON file source |
-| `redb-backend` | redb-backed dconf-like key-value store source (pure Rust, multi-process via `experimental-multiprocess`) |
+| `redb-backend` | redb-backed dconf-like key-value store source (pure Rust, multi-process via redb `MultiWriter` mode) |
 | `hot-reload` | Live config handle with selective per-source file watcher |
 | `async` | Async source trait + `AsyncConfigLoader` |
 | `native-keyring` | OS keyring key provider (Linux Secret Service, macOS Keychain, Windows Credential Manager) |
@@ -111,7 +111,7 @@ let config = ConfigLoader::<Config>::default()
 
 With `hot-reload` enabled, use `with_watched_source(RedbSource::new(...))` to react to writes from other processes without polling. The watcher monitors the containing directory, so cross-process writes land immediately.
 
-Multi-process support rides on redb's `experimental-multiprocess` feature (file byte-range locks) — **not reliable on network filesystems** (NFS/SMB). Use a local path.
+Multi-process support rides on redb 5's `ConcurrencyMode::MultiWriter` (file byte-range locks; incompatible with files held open by redb 4.3/4.4 `experimental-multiprocess` processes) — **not reliable on network filesystems** (NFS/SMB). Use a local path.
 
 ## Schema migrations
 

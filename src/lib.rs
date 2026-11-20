@@ -20,9 +20,9 @@ pub use confex_core::key::WindowsCredentialManager;
 pub use confex_core::key::{PassphraseUnsealer, SealedFileKeyProvider, Unsealer};
 pub use confex_core::merge::{FieldStrategies, MergeStrategy};
 pub use confex_core::migrate::{Migration, MigrationChain, rename_key};
-pub use confex_core::paths::{app_config_dir, app_data_dir, config_base_dir, data_base_dir};
 #[cfg(feature = "istmo")]
 pub use confex_core::paths::{app_cache_dir, app_state_dir};
+pub use confex_core::paths::{app_config_dir, app_data_dir, config_base_dir, data_base_dir};
 #[cfg(feature = "hot-reload")]
 pub use confex_core::source::WatchableSource;
 pub use confex_core::source::{CliSource, EnvSource, FileSource, Source};

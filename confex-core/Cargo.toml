@@ -28,10 +28,10 @@ rand = "0.8"
 hex = "0.4"
 arc-swap = "1"
 tracing = "0.1"
-redb = { version = "4.4", features = ["experimental-multiprocess"], optional = true }
+redb = { version = "5.0", optional = true }
 notify = { version = "6", optional = true }
 argon2 = { version = "0.5", optional = true }
-istmo-core = { path = "../../../istmo/istmo/crates/core", version = "0.1.1-alpha.3", optional = true }
+istmo-core = { version = "0.1.1-alpha.6", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "4", features = ["blocking"], optional = true }

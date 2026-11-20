@@ -6,8 +6,8 @@ use std::{
 };
 
 use redb::{
-    Builder, ConcurrencyMode, Database, ReadableDatabase as _, ReadableTable as _, ReadableTableMetadata as _,
-    TableDefinition,
+    Builder, ConcurrencyMode, Database, ReadableDatabase as _, ReadableTable as _,
+    ReadableTableMetadata as _, TableDefinition,
 };
 
 use crate::{codec, error::SourceError, source::Source, value::ConfigValue};
@@ -26,8 +26,8 @@ fn open_db(path: &Path) -> Result<Database, redb::DatabaseError> {
 /// `{ "window": { "width": … } }`. Values are codec-encoded `ConfigValue`s.
 ///
 /// Safe for concurrent access from multiple processes; redb's multi-writer
-/// concurrency mode handles isolation via file byte-range locks. Requires the
-/// `experimental-multiprocess` feature on the `redb` crate (enabled by default).
+/// concurrency mode handles isolation via file byte-range locks (built into
+/// redb since 4.5, no feature flag needed).
 ///
 /// The `app_name` scope is injected automatically when the source is added to a
 /// [`crate::config::ConfigLoader`] via `with_source` or `with_watched_source`.
