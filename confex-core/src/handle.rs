@@ -327,12 +327,12 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
             .name("confex-selective-watcher".into())
             .spawn(move || {
                 selective_watcher_loop(
-                    rx,
-                    swap_bg,
-                    entries,
+                    &rx,
+                    &swap_bg,
+                    &entries,
                     initial_merged,
                     strategies,
-                    transform,
+                    &transform,
                     debounce,
                 );
             })
@@ -349,14 +349,13 @@ impl<T: ConfigSchema + Clone + Send + Sync + 'static> ConfigHandle<T> {
 }
 
 #[cfg(feature = "hot-reload")]
-#[allow(clippy::needless_pass_by_value)]
 fn selective_watcher_loop<T: Send + Sync + 'static>(
-    rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>,
-    swap: std::sync::Arc<arc_swap::ArcSwap<T>>,
-    entries: Vec<SelectiveEntry>,
+    rx: &std::sync::mpsc::Receiver<notify::Result<notify::Event>>,
+    swap: &std::sync::Arc<arc_swap::ArcSwap<T>>,
+    entries: &[SelectiveEntry],
     mut last_raw: ConfigValue,
     strategies: crate::merge::FieldStrategies,
-    transform: std::sync::Arc<dyn Fn(ConfigValue) -> Result<T, LoadError> + Send + Sync>,
+    transform: &std::sync::Arc<dyn Fn(ConfigValue) -> Result<T, LoadError> + Send + Sync>,
     debounce: std::time::Duration,
 ) {
     use std::{collections::HashSet, path::PathBuf, sync::mpsc::RecvTimeoutError};
@@ -387,7 +386,7 @@ fn selective_watcher_loop<T: Send + Sync + 'static>(
         #[cfg(feature = "sismo")]
         sismo::scope!("confex::hot_reload_selective");
         let mut any_updated = false;
-        for entry in &entries {
+        for entry in entries {
             let matches = entry
                 .watch_paths
                 .iter()
@@ -413,7 +412,7 @@ fn selective_watcher_loop<T: Send + Sync + 'static>(
         }
 
         let mut new_merged = ConfigValue::Table(std::collections::BTreeMap::new());
-        for entry in &entries {
+        for entry in entries {
             let cache = entry
                 .cache
                 .lock()
@@ -531,7 +530,7 @@ mod tests {
         assert_eq!(h2.read().value, 7);
     }
 
-    #[cfg(feature = "hot-reload")]
+    #[cfg(all(feature = "hot-reload", feature = "toml"))]
     #[test]
     fn selective_watcher_only_recollects_changed_source() {
         use crate::{
@@ -561,7 +560,7 @@ mod tests {
         assert_eq!(handle.read().value, 77);
     }
 
-    #[cfg(feature = "hot-reload")]
+    #[cfg(all(feature = "hot-reload", feature = "toml"))]
     #[test]
     fn watcher_reloads_on_file_change() {
         use crate::{

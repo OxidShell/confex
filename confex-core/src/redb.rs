@@ -1,5 +1,3 @@
-#![allow(clippy::doc_markdown)]
-
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},

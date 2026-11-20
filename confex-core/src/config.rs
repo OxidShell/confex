@@ -92,10 +92,10 @@ impl<S: ConfigSchema> ConfigLoader<S> {
     /// Add a passive source (env vars, CLI args, etc.).
     ///
     /// Passive sources are collected once at load time. In selective hot-reload
-    /// mode ([`watch_auto`](ConfigLoader::watch_auto)) their initial cache is
-    /// reused for every re-merge; they never trigger a reload themselves. Use
-    /// [`with_watched_source`](ConfigLoader::with_watched_source) for
-    /// file-backed or redb sources that should trigger selective reloads.
+    /// mode (`watch_auto`, `hot-reload` feature) their initial cache is reused
+    /// for every re-merge; they never trigger a reload themselves. Use
+    /// `with_watched_source` for file-backed or redb sources that should
+    /// trigger selective reloads.
     #[must_use]
     pub fn with_source(mut self, source: impl Source + Send + Sync + 'static) -> Self {
         let source = source.with_app_name(S::APP_NAME);

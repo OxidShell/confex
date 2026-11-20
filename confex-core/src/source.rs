@@ -16,8 +16,8 @@ pub trait Source {
     /// Inject the application name derived from [`crate::config::ConfigSchema::APP_NAME`].
     ///
     /// Called automatically by [`crate::config::ConfigLoader::with_source`] and
-    /// [`crate::config::ConfigLoader::with_watched_source`] before the source is
-    /// stored. The default is a no-op; override it for sources that use the app
+    /// `ConfigLoader::with_watched_source` before the source is stored. The
+    /// default is a no-op; override it for sources that use the app
     /// name to scope their data (e.g. `RedbSource`, `EnvSource`). The name
     /// must not override an explicit value already set on the source.
     #[must_use]
@@ -165,7 +165,7 @@ impl<F: Format> Source for FileSource<F> {
 
 /// A [`Source`] that can declare which filesystem paths it monitors.
 ///
-/// Implemented by [`FileSource`] and [`SqliteSource`]. Passive sources (env
+/// Implemented by [`FileSource`] and `RedbSource`. Passive sources (env
 /// vars, CLI args) do not implement this — their values are fixed at load time
 /// and never need a reload trigger.
 #[cfg(feature = "hot-reload")]

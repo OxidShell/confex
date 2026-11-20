@@ -4,7 +4,7 @@
 //!
 //! - **Default** (no features): confex derives XDG / `%APPDATA%` / `~/Library`
 //!   paths itself. Desktop only (Linux, macOS, Windows).
-//! - **`istmo` feature**: delegates to [`istmo_core::path`], which also covers
+//! - **`istmo` feature**: delegates to `istmo_core::path`, which also covers
 //!   Android (`Context.filesDir`) and iOS (`NSFileManager`). The per-app
 //!   subdirectory is derived from the build-time `ISTMO_APP_BUNDLE_ID` env
 //!   var (baked by `istmo-build::emit_app`), so the `app_name` argument of

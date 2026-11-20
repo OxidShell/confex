@@ -45,8 +45,40 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 
 [[example]]
 name = "async_loader"
-required-features = ["async"]
+required-features = ["macros", "async"]
 
 [[example]]
 name = "sealed_key"
-required-features = ["sealed-key"]
+required-features = ["macros", "sealed-key"]
+
+[[example]]
+name = "basic"
+required-features = ["macros"]
+
+[[example]]
+name = "encryption"
+required-features = ["macros"]
+
+[[example]]
+name = "file_toml"
+required-features = ["macros", "toml"]
+
+[[example]]
+name = "hot_reload"
+required-features = ["macros", "toml", "hot-reload"]
+
+[[example]]
+name = "migration"
+required-features = ["macros"]
+
+[[example]]
+name = "multi_source"
+required-features = ["macros", "toml"]
+
+[[example]]
+name = "redb_store"
+required-features = ["macros", "redb-backend"]
+
+[[example]]
+name = "write_guard"
+required-features = ["macros"]

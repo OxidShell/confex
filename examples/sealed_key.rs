@@ -1,8 +1,7 @@
 /// Use [`SealedFileKeyProvider`] so the key blob on disk is protected by a passphrase.
-/// The passphrase comes from the CONFEX_MASTER_KEY env var — CI/CD friendly.
+/// The passphrase comes from the `CONFEX_MASTER_KEY` env var — CI/CD friendly.
 ///
-/// Run: CONFEX_MASTER_KEY=secret cargo run --example sealed_key --features sealed-key
-#[cfg(feature = "sealed-key")]
+/// Run: `CONFEX_MASTER_KEY=secret cargo run --example sealed_key --features sealed-key`
 fn main() {
     use std::path::PathBuf;
 
@@ -38,9 +37,4 @@ fn main() {
         .expect("failed to load config");
 
     println!("endpoint={} api_key=<redacted>", config.endpoint);
-}
-
-#[cfg(not(feature = "sealed-key"))]
-fn main() {
-    eprintln!("Run with: cargo run --example sealed_key --features sealed-key");
 }

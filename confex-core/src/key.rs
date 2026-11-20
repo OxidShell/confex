@@ -489,9 +489,9 @@ impl<U: Unsealer> KeyProvider for SealedFileKeyProvider<U> {
 
 /// Platform-native keyring provider, selected at compile time.
 ///
-/// - Linux: [`SecretServiceKeyring`] (Secret Service via D-Bus, reboot-persistent)
-/// - macOS: [`MacOsKeychain`] (system Keychain, login-persistent)
-/// - Windows: [`WindowsCredentialManager`] (Credential Manager, reboot-persistent)
+/// - Linux: `SecretServiceKeyring` (Secret Service via D-Bus, reboot-persistent)
+/// - macOS: `MacOsKeychain` (system Keychain, login-persistent)
+/// - Windows: `WindowsCredentialManager` (Credential Manager, reboot-persistent)
 ///
 /// Requires the `native-keyring` feature.
 #[cfg(all(target_os = "linux", feature = "native-keyring"))]

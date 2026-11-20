@@ -1,6 +1,6 @@
 #![warn(clippy::pedantic)]
-#![allow(clippy::module_name_repetitions)]
 
+#[cfg(feature = "redb-backend")]
 pub(crate) mod codec;
 pub mod config;
 pub mod crypto;

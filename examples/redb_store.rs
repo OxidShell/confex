@@ -8,7 +8,6 @@
 ///
 /// Run: `cargo run --example redb_store --features redb-backend`
 /// Run: `cargo run --example redb_store --features redb-backend,hot-reload`
-#[cfg(feature = "redb-backend")]
 fn main() {
     use std::path::PathBuf;
 
@@ -68,9 +67,4 @@ fn main() {
             .expect("failed to start selective watcher");
         println!("live (selective) — theme={}", handle_b.read().theme);
     }
-}
-
-#[cfg(not(feature = "redb-backend"))]
-fn main() {
-    eprintln!("Run with: cargo run --example redb_store --features redb-backend");
 }

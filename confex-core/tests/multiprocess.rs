@@ -17,6 +17,8 @@ use confex_core::{
 
 const CHILD_ENV: &str = "CONFEX_MP_CHILD";
 const APP: &str = "mp_test";
+const WORKERS: i64 = 4;
+const OPS: i64 = 25;
 
 fn run_child() {
     let db = PathBuf::from(std::env::var("CONFEX_MP_DB").expect("CONFEX_MP_DB"));
@@ -44,9 +46,6 @@ fn multi_process_writes_no_corruption() {
         run_child();
         return;
     }
-
-    const WORKERS: i64 = 4;
-    const OPS: i64 = 25;
 
     let dir = tempfile::tempdir().expect("tempdir");
     let db = dir.path().join("mp.redb");

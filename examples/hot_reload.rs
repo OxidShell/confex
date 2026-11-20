@@ -8,9 +8,6 @@
 ///
 /// Run: `cargo run --example hot_reload`
 /// Then edit `hot_reload.toml` while the process is running.
-///
-/// Run: `cargo run --example hot_reload --features hot-reload`
-#[cfg(feature = "hot-reload")]
 fn main() {
     use std::{path::PathBuf, thread, time::Duration};
 
@@ -59,9 +56,4 @@ fn main() {
             last_port = cfg.port;
         }
     }
-}
-
-#[cfg(not(feature = "hot-reload"))]
-fn main() {
-    eprintln!("Run with: cargo run --example hot_reload --features hot-reload");
 }

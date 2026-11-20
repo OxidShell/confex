@@ -2,8 +2,10 @@ use crate::{error::MigrationError, value::ConfigValue};
 
 /// A single schema migration step.
 pub trait Migration: Send + Sync {
-    // Naming mirrors the `from`/`to` language used throughout the plan docs.
-    #[allow(clippy::wrong_self_convention)]
+    #[expect(
+        clippy::wrong_self_convention,
+        reason = "pairs with `to_version`; renaming would break the public `Migration` trait"
+    )]
     fn from_version(&self) -> u32;
     fn to_version(&self) -> u32;
 
