@@ -300,7 +300,7 @@ dependencies = [
 
 [[package]]
 name = "confex"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "confex-core",
  "confex-macros",
@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "confex-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "confex-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",

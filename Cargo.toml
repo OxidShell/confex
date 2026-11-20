@@ -3,7 +3,7 @@ members = ["confex-core", "confex-macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/OxidShell/confex"
@@ -36,8 +36,8 @@ istmo = ["confex-core/istmo"]
 sismo = ["confex-core/sismo"]
 
 [dependencies]
-confex-core = { path = "confex-core", version = "0.1" }
-confex-macros = { path = "confex-macros", version = "0.1", optional = true }
+confex-core = { path = "confex-core", version = "0.2" }
+confex-macros = { path = "confex-macros", version = "0.2", optional = true }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
