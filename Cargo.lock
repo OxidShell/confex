@@ -323,6 +323,7 @@ dependencies = [
  "security-framework",
  "serde",
  "serde_json",
+ "sismo",
  "tempfile",
  "toml",
  "tracing",
@@ -362,6 +363,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "crc32fast"
+version = "1.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b929dd2a135771f40afabd1073f85eed59c800b7c61901e5c254270497dad64"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -779,6 +789,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
+name = "lz4_flex"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f56455fff36934a9500d69062aec1c77037179b6f0669e4d5d6b72b84722d6a3"
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1157,6 +1173,41 @@ checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
  "errno",
  "libc",
+]
+
+[[package]]
+name = "sismo"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60585f9bb984b18d7dcfd315745450e663c40b491e49fa794f423e11aef627fc"
+dependencies = [
+ "istmo-core",
+ "libc",
+ "sismo-format",
+ "sismo-macros",
+ "thiserror",
+]
+
+[[package]]
+name = "sismo-format"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4715c1fd6e6e857be2f3b5e27b8f43868c52ef4415ba41a0c34f583f2c396ff"
+dependencies = [
+ "crc32fast",
+ "lz4_flex",
+ "thiserror",
+]
+
+[[package]]
+name = "sismo-macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7766d7b8419029adca32b1ad82a2d6c31a1d1d17bf9d643b6f1b085582de15b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

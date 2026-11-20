@@ -148,6 +148,7 @@ impl Source for RedbSource {
         self
     }
 
+    #[cfg_attr(feature = "sismo", sismo::function("confex::source::redb"))]
     fn collect(&self) -> Result<ConfigValue, SourceError> {
         let app_name = match self.app_name.as_deref() {
             Some(n) if !n.is_empty() => n,
@@ -207,6 +208,7 @@ impl RedbStore {
     /// # Errors
     /// Returns [`SourceError::Redb`] on redb failure, [`SourceError::Io`] if the
     /// parent directory cannot be created.
+    #[cfg_attr(feature = "sismo", sismo::function("confex::redb::set"))]
     pub fn set(&self, key: &str, value: &ConfigValue) -> Result<(), SourceError> {
         let encoded = codec::encode(value);
         if let Some(parent) = self.db_path.parent() {
@@ -229,6 +231,7 @@ impl RedbStore {
     ///
     /// # Errors
     /// Returns [`SourceError::Redb`] on redb failure.
+    #[cfg_attr(feature = "sismo", sismo::function("confex::redb::get"))]
     pub fn get(&self, key: &str) -> Result<Option<ConfigValue>, SourceError> {
         if !self.db_path.exists() {
             return Ok(None);
@@ -250,6 +253,7 @@ impl RedbStore {
     ///
     /// # Errors
     /// Returns [`SourceError::Redb`] on redb failure.
+    #[cfg_attr(feature = "sismo", sismo::function("confex::redb::delete"))]
     pub fn delete(&self, key: &str) -> Result<(), SourceError> {
         if !self.db_path.exists() {
             return Ok(());

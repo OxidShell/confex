@@ -33,6 +33,7 @@ async = ["confex-core/async"]
 json = ["confex-core/json"]
 toml = ["confex-core/toml"]
 istmo = ["confex-core/istmo"]
+sismo = ["confex-core/sismo"]
 
 [dependencies]
 confex-core = { path = "confex-core", version = "0.1" }

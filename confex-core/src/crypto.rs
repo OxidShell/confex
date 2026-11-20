@@ -72,6 +72,7 @@ impl Encryptor for Aes256GcmEncryptor {
 ///
 /// # Errors
 /// Returns [`CryptoError::NotAString`] if a targeted field is not a string value.
+#[cfg_attr(feature = "sismo", sismo::function("confex::encrypt_fields"))]
 pub fn encrypt_fields(
     value: &mut ConfigValue,
     field_names: &[&str],
@@ -98,6 +99,7 @@ pub fn encrypt_fields(
 ///
 /// # Errors
 /// Returns an error if hex decoding, decryption, or UTF-8 conversion fails.
+#[cfg_attr(feature = "sismo", sismo::function("confex::decrypt_fields"))]
 pub fn decrypt_fields(
     value: &mut ConfigValue,
     field_names: &[&str],

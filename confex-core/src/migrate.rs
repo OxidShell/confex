@@ -32,6 +32,7 @@ impl MigrationChain {
     /// # Errors
     /// Returns [`MigrationError::NoPath`] if no step covers the current version,
     /// or [`MigrationError::Step`] if a step's transformation fails.
+    #[cfg_attr(feature = "sismo", sismo::function("confex::migrate"))]
     pub fn run(
         &self,
         mut value: ConfigValue,

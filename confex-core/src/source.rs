@@ -61,6 +61,7 @@ impl Source for EnvSource {
         self
     }
 
+    #[cfg_attr(feature = "sismo", sismo::function("confex::source::env"))]
     fn collect(&self) -> Result<ConfigValue, SourceError> {
         if self.prefix.is_empty() {
             return Ok(ConfigValue::Table(BTreeMap::new()));
@@ -117,6 +118,7 @@ impl FromIterator<(String, ConfigValue)> for CliSource {
 }
 
 impl Source for CliSource {
+    #[cfg_attr(feature = "sismo", sismo::function("confex::source::cli"))]
     fn collect(&self) -> Result<ConfigValue, SourceError> {
         Ok(ConfigValue::Table(self.values.clone()))
     }
@@ -148,6 +150,7 @@ impl<F: Format> FileSource<F> {
 }
 
 impl<F: Format> Source for FileSource<F> {
+    #[cfg_attr(feature = "sismo", sismo::function("confex::source::file"))]
     fn collect(&self) -> Result<ConfigValue, SourceError> {
         let Some(path) = self.resolve() else {
             return Ok(ConfigValue::Table(BTreeMap::new()));

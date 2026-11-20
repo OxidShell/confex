@@ -144,6 +144,7 @@ impl<S: ConfigSchema> ConfigLoader<S> {
     ///
     /// # Errors
     /// Returns [`LoadError`] on source, migration, crypto, or deserialization failure.
+    #[cfg_attr(feature = "sismo", sismo::function("confex::load"))]
     pub fn load(&self) -> Result<S, LoadError> {
         let strategies = S::field_strategies();
 
@@ -342,6 +343,7 @@ impl<S: ConfigSchema> AsyncConfigLoader<S> {
     ///
     /// # Errors
     /// Returns [`LoadError`] on source, migration, crypto, or deserialization failure.
+    #[cfg_attr(feature = "sismo", sismo::function("confex::load_async"))]
     pub async fn load(&self) -> Result<S, LoadError> {
         let strategies = S::field_strategies();
 

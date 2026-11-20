@@ -33,6 +33,7 @@ Both share the same `#[derive(ConfigSchema)]`, `ConfigValue` tree, and migration
 | `native-keyring` | OS keyring key provider (Linux Secret Service, macOS Keychain, Windows Credential Manager) |
 | `sealed-key` | Passphrase-sealed key blob (Argon2id + AES-256-GCM) |
 | `istmo` | Delegate path resolution to `istmo-core` (adds Android/iOS targets) |
+| `sismo` | Instrument load, sources, redb store, migrations, crypto and hot-reload with [`sismo`](https://docs.rs/sismo) spans |
 
 Default features: `toml`, `redb-backend`, `hot-reload`.
 
@@ -264,6 +265,23 @@ confex = { version = "0.1", features = ["istmo"] }
 In this mode `app_config_dir` / `app_data_dir` ignore their `app_name` argument — istmo already resolved the app identity at build time from `ISTMO_APP_BUNDLE_ID` (baked by `istmo-build::emit_app`). Two extra helpers show up: `app_cache_dir` and `app_state_dir`. Everything else — merge, hot-reload, redb, encryption — works unchanged.
 
 On Android, make sure the istmo transport has called `istmo_core::path::install(...)` before confex touches any path (it does so automatically in a normal `istmo::runtime!` setup).
+
+## Profiling (`sismo` feature)
+
+Enable the `sismo` feature to record confex's work as [`sismo`](https://docs.rs/sismo) spans. confex only emits spans; the host app installs the recorder and picks the sinks (file, live, flight recorder). Without an installed recorder the spans are no-ops.
+
+```toml
+[dependencies]
+confex = { version = "0.1", features = ["sismo"] }
+sismo = "0.1"
+```
+
+```rust,ignore
+let _rec = sismo::install(sismo::config!().record_to("traces"))?;
+let cfg = ConfigLoader::<AppConfig>::default().with_source(/* ... */).load()?;
+```
+
+Recorded spans: `confex::load`, `confex::load_async`, `confex::source::{file,env,cli,redb}`, `confex::redb::{set,get,delete}`, `confex::migrate`, `confex::{encrypt,decrypt}_fields`, `confex::hot_reload`, `confex::hot_reload_selective`. Combined with `istmo`, sismo's `istmo` feature is enabled too.
 
 ## Key providers
 

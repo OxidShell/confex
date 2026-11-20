@@ -260,6 +260,8 @@ fn watcher_loop<T: Send + Sync + 'static>(
                 Err(RecvTimeoutError::Disconnected) => return,
             }
         }
+        #[cfg(feature = "sismo")]
+        sismo::scope!("confex::hot_reload");
         match reload() {
             Ok(cfg) => {
                 swap.store(Arc::new(cfg));
@@ -382,6 +384,8 @@ fn selective_watcher_loop<T: Send + Sync + 'static>(
             }
         }
 
+        #[cfg(feature = "sismo")]
+        sismo::scope!("confex::hot_reload_selective");
         let mut any_updated = false;
         for entry in &entries {
             let matches = entry
